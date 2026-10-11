@@ -6,7 +6,8 @@ import 'controllers/settings_controller.dart';
 import 'controllers/native_tts_controller.dart';
 import 'controllers/audio_mixer_controller.dart';
 import 'controllers/library_controller.dart';
-import 'presentation/library/library_screen.dart';
+import 'controllers/explorer_controller.dart';
+import 'presentation/explorer/explorer_screen.dart';
 
 class AFPlayersApp extends StatelessWidget {
   const AFPlayersApp({super.key});
@@ -17,12 +18,13 @@ class AFPlayersApp extends StatelessWidget {
     Get.put(NativeTtsController());
     Get.put(AudioMixerController());
     Get.put(LibraryController());
+    Get.put(ExplorerController());
 
     return Obx(() => GetMaterialApp(
       title: AppConstants.appName,
       debugShowCheckedModeBanner: false,
       theme: settings.isDarkMode.value ? AppTheme.darkTheme : AppTheme.lightTheme,
-      home: const LibraryScreen(),
+      home: const ExplorerScreen(),
     ));
   }
 }

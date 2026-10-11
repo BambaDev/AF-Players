@@ -29,6 +29,8 @@ class PlayerControls extends StatefulWidget {
 
 class _PlayerControlsState extends State<PlayerControls> {
   bool _volumeExpanded = false;
+  bool _isSeeking = false;
+  double _seekValue = 0;
 
   NativePlayerController get _player => widget.playerController;
   SyncController get _sync => widget.syncController;
@@ -86,12 +88,28 @@ class _PlayerControlsState extends State<PlayerControls> {
               thumbColor: AppColors.primary,
             ),
             child: Slider(
-              value: maxVal > 0
-                  ? pos.inMilliseconds.toDouble().clamp(0, maxVal)
-                  : 0,
+              value: _isSeeking
+                  ? _seekValue.clamp(0, maxVal > 0 ? maxVal : 1)
+                  : (maxVal > 0
+                      ? pos.inMilliseconds.toDouble().clamp(0, maxVal)
+                      : 0),
               max: maxVal > 0 ? maxVal : 1,
+              onChangeStart: (value) {
+                setState(() {
+                  _isSeeking = true;
+                  _seekValue = value;
+                });
+              },
               onChanged: (value) {
+                setState(() {
+                  _seekValue = value;
+                });
+              },
+              onChangeEnd: (value) {
                 _sync.onUserSeek(Duration(milliseconds: value.toInt()));
+                setState(() {
+                  _isSeeking = false;
+                });
               },
             ),
           ),
@@ -101,7 +119,10 @@ class _PlayerControlsState extends State<PlayerControls> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  pos.toShortTimestamp(),
+                  (_isSeeking
+                      ? Duration(milliseconds: _seekValue.toInt())
+                      : pos)
+                    .toShortTimestamp(),
                   style: const TextStyle(color: Colors.white70, fontSize: 12),
                 ),
                 Text(
