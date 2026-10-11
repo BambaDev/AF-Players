@@ -6,6 +6,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:uuid/uuid.dart';
 import '../../controllers/explorer_controller.dart';
 import '../../controllers/library_controller.dart';
+import '../../controllers/thumbnail_controller.dart';
 import '../../core/constants/app_colors.dart';
 import '../../data/models/video_item.dart';
 import '../player/player_screen.dart';
@@ -62,11 +63,103 @@ class ExplorerScreen extends StatelessWidget {
         body: Column(
           children: [
             _buildBreadcrumb(explorer),
+            _buildResumeBanner(context),
             Expanded(child: _buildContent(explorer, context)),
           ],
         ),
       ),
     ));
+  }
+
+  Widget _buildResumeBanner(BuildContext context) {
+    final library = Get.find<LibraryController>();
+    return Obx(() {
+      final video = library.lastPlayed;
+      if (video == null || video.lastPositionMs <= 0) {
+        return const SizedBox.shrink();
+      }
+
+      final progress = (video.lastPositionMs / 1000 / 60).toStringAsFixed(0);
+
+      return Container(
+        margin: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              AppColors.primary.withValues(alpha: 0.15),
+              AppColors.accent.withValues(alpha: 0.08),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => Get.to(() => PlayerScreen(video: video)),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(22),
+                  ),
+                  child: const Icon(
+                    Icons.play_arrow_rounded,
+                    color: AppColors.primary,
+                    size: 28,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Reprendre la lecture',
+                        style: TextStyle(
+                          color: AppColors.accent,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        video.title,
+                        style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Position: ${progress}min',
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(
+                  Icons.chevron_right,
+                  color: AppColors.primary,
+                  size: 24,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    });
   }
 
   Widget _buildBreadcrumb(ExplorerController explorer) {
@@ -248,15 +341,7 @@ class ExplorerScreen extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: AppColors.accent.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(Icons.movie, color: AppColors.accent, size: 26),
-            ),
+            _VideoThumbnail(videoPath: file.path),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
@@ -469,5 +554,47 @@ class ExplorerScreen extends StatelessWidget {
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(0)} KB';
     if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
     return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
+  }
+}
+
+class _VideoThumbnail extends StatefulWidget {
+  final String videoPath;
+  const _VideoThumbnail({required this.videoPath});
+
+  @override
+  State<_VideoThumbnail> createState() => _VideoThumbnailState();
+}
+
+class _VideoThumbnailState extends State<_VideoThumbnail> {
+  @override
+  void initState() {
+    super.initState();
+    Get.find<ThumbnailController>().getThumbnail(widget.videoPath);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Obx(() {
+      final thumbs = Get.find<ThumbnailController>().thumbnails;
+      final path = thumbs[widget.videoPath];
+
+      return Container(
+        width: 56,
+        height: 42,
+        decoration: BoxDecoration(
+          color: AppColors.accent.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: path != null
+            ? Image.file(
+                File(path),
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) =>
+                    const Icon(Icons.movie, color: AppColors.accent, size: 24),
+              )
+            : const Icon(Icons.movie, color: AppColors.accent, size: 24),
+      );
+    });
   }
 }

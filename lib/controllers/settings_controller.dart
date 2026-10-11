@@ -10,6 +10,8 @@ class SettingsController extends GetxController {
   final seekDuration = 10.obs;
   final isDarkMode = true.obs;
   final ttsSyncMode = 0.obs;
+  final isDuckingEnabled = true.obs;
+  final duckingLevel = 0.1.obs;
 
   @override
   void onInit() {
@@ -31,6 +33,8 @@ class SettingsController extends GetxController {
     seekDuration.value = prefs.getInt('seek_duration') ?? 10;
     isDarkMode.value = prefs.getBool('is_dark_mode') ?? true;
     ttsSyncMode.value = prefs.getInt('tts_sync_mode') ?? 0;
+    isDuckingEnabled.value = prefs.getBool('is_ducking_enabled') ?? true;
+    duckingLevel.value = prefs.getDouble('ducking_level') ?? 0.1;
   }
 
   Future<void> updateTtsRate(double rate) async {
@@ -95,5 +99,17 @@ class SettingsController extends GetxController {
     ttsSyncMode.value = mode;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('tts_sync_mode', mode);
+  }
+
+  Future<void> updateDuckingEnabled(bool enabled) async {
+    isDuckingEnabled.value = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('is_ducking_enabled', enabled);
+  }
+
+  Future<void> updateDuckingLevel(double level) async {
+    duckingLevel.value = level;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('ducking_level', level);
   }
 }

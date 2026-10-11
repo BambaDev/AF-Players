@@ -7,6 +7,7 @@ import 'controllers/native_tts_controller.dart';
 import 'controllers/audio_mixer_controller.dart';
 import 'controllers/library_controller.dart';
 import 'controllers/explorer_controller.dart';
+import 'controllers/thumbnail_controller.dart';
 import 'presentation/explorer/explorer_screen.dart';
 
 class AFPlayersApp extends StatelessWidget {
@@ -19,6 +20,7 @@ class AFPlayersApp extends StatelessWidget {
     Get.put(AudioMixerController());
     Get.put(LibraryController());
     Get.put(ExplorerController());
+    Get.put(ThumbnailController());
 
     return Obx(() => GetMaterialApp(
       title: AppConstants.appName,

@@ -23,6 +23,7 @@ class SyncController extends GetxController {
   bool _loopRunning = false;
   bool _videoPausedForTts = false;
   bool _draining = false;
+  bool _isDucked = false;
   double _baseSpeed = 1.0;
 
   @override
@@ -83,6 +84,7 @@ class SyncController extends GetxController {
   Future<void> _processLoop() async {
     if (_loopRunning) return;
     _loopRunning = true;
+    _duckVideo();
 
     while (_queue.isNotEmpty) {
       if (syncStatus.value == SyncStatus.userPaused && !_draining) break;
@@ -101,6 +103,7 @@ class SyncController extends GetxController {
 
     if (_draining) {
       _draining = false;
+      _unduckVideo();
       syncStatus.value = SyncStatus.userPaused;
       return;
     }
@@ -111,6 +114,7 @@ class SyncController extends GetxController {
   }
 
   void _onAllDone() {
+    _unduckVideo();
     if (ttsSyncMode.value == 1 && _videoPausedForTts) {
       _videoPausedForTts = false;
       _playerController.play();
@@ -135,6 +139,7 @@ class SyncController extends GetxController {
   }
 
   void onUserPause() {
+    _unduckVideo();
     _videoPausedForTts = false;
     _playerController.pause();
 
@@ -187,6 +192,7 @@ class SyncController extends GetxController {
   }
 
   void reset() {
+    _unduckVideo();
     _draining = false;
     _ttsController.stop();
     _queue.clear();
@@ -194,6 +200,18 @@ class SyncController extends GetxController {
     _videoPausedForTts = false;
     if (ttsSyncMode.value == 2) _restoreBaseSpeed();
     syncStatus.value = SyncStatus.idle;
+  }
+
+  void _duckVideo() {
+    if (!_settings.isDuckingEnabled.value || _isDucked) return;
+    _isDucked = true;
+    _playerController.setVideoVolume(_settings.duckingLevel.value);
+  }
+
+  void _unduckVideo() {
+    if (!_isDucked) return;
+    _isDucked = false;
+    _playerController.setVideoVolume(_settings.videoVolume.value);
   }
 
   @override
