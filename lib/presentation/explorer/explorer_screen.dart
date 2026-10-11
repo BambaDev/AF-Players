@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
@@ -17,11 +18,11 @@ class ExplorerScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final explorer = Get.find<ExplorerController>();
 
-    return PopScope(
+    return Obx(() => PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) {
-          if (explorer.isAtRoot.value) {
+          if (explorer.isAtRoot) {
             SystemNavigator.pop();
           } else {
             explorer.goBack();
@@ -40,18 +41,16 @@ class ExplorerScreen extends StatelessWidget {
               color: AppColors.textPrimary,
             ),
           ),
-          leading: Obx(() => explorer.isAtRoot.value
+          leading: explorer.isAtRoot
               ? const SizedBox.shrink()
               : IconButton(
                   icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
                   onPressed: explorer.goBack,
-                )),
+                ),
           actions: [
             IconButton(
               icon: const Icon(Icons.refresh, color: AppColors.textSecondary),
-              onPressed: () => explorer.isAtRoot.value
-                  ? explorer.loadRootFolders()
-                  : explorer.openFolder(explorer.currentPath.value),
+              onPressed: () => explorer.openFolder(explorer.currentPath.value),
               tooltip: 'Actualiser',
             ),
             IconButton(
@@ -67,110 +66,134 @@ class ExplorerScreen extends StatelessWidget {
           ],
         ),
       ),
-    );
+    ));
   }
 
   Widget _buildBreadcrumb(ExplorerController explorer) {
-    return Obx(() {
-      final path = explorer.currentPath.value;
-      if (path.isEmpty) return const SizedBox.shrink();
+    final path = explorer.currentPath.value;
+    const prefix = '/storage/emulated/0';
+    final relative = path.length > prefix.length
+        ? path.substring(prefix.length + 1)
+        : '';
+    final segments = relative.split('/').where((s) => s.isNotEmpty).toList();
 
-      final segments = path.split('/').where((s) => s.isNotEmpty).toList();
-      if (segments.isEmpty) return const SizedBox.shrink();
-
-      return Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        color: AppColors.surface.withValues(alpha: 0.5),
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          reverse: true,
-          child: Row(
-            children: [
-              InkWell(
-                onTap: () => explorer.openFolder('/storage/emulated/0'),
-                child: const Icon(Icons.phone_android, size: 16, color: AppColors.accent),
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      color: AppColors.surface.withValues(alpha: 0.5),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        reverse: true,
+        child: Row(
+          children: [
+            InkWell(
+              onTap: () => explorer.openFolder(prefix),
+              child: const Row(
+                children: [
+                  Icon(Icons.phone_android, size: 16, color: AppColors.accent),
+                  SizedBox(width: 4),
+                  Text('Stockage', style: TextStyle(fontSize: 12, color: AppColors.accent)),
+                ],
               ),
-              for (int i = 0; i < segments.length; i++) ...[
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 4),
-                  child: Icon(Icons.chevron_right, size: 14, color: AppColors.textSecondary),
-                ),
-                InkWell(
-                  onTap: () {
-                    final target = '/${segments.sublist(0, i + 1).join('/')}';
-                    explorer.openFolder(target);
-                  },
-                  child: Text(
-                    segments[i],
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: i == segments.length - 1 ? AppColors.accent : AppColors.textSecondary,
-                      fontWeight: i == segments.length - 1 ? FontWeight.w600 : FontWeight.normal,
-                    ),
+            ),
+            for (int i = 0; i < segments.length; i++) ...[
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 4),
+                child: Icon(Icons.chevron_right, size: 14, color: AppColors.textSecondary),
+              ),
+              InkWell(
+                onTap: () {
+                  final target = '$prefix/${segments.sublist(0, i + 1).join('/')}';
+                  explorer.openFolder(target);
+                },
+                child: Text(
+                  segments[i],
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: i == segments.length - 1 ? AppColors.accent : AppColors.textSecondary,
+                    fontWeight: i == segments.length - 1 ? FontWeight.w600 : FontWeight.normal,
                   ),
                 ),
-              ],
+              ),
             ],
-          ),
+          ],
         ),
-      );
-    });
+      ),
+    );
   }
 
   Widget _buildContent(ExplorerController explorer, BuildContext context) {
-    return Obx(() {
-      if (explorer.isLoading.value) {
-        return const Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CircularProgressIndicator(color: AppColors.primary),
-              SizedBox(height: 16),
-              Text('Analyse des fichiers...', style: TextStyle(color: AppColors.textSecondary)),
-            ],
-          ),
-        );
-      }
-
-      final folders = explorer.folders;
-      final videos = explorer.videoFiles;
-
-      if (folders.isEmpty && videos.isEmpty) {
-        return Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.video_library_outlined, size: 64, color: AppColors.textSecondary.withValues(alpha: 0.4)),
-              const SizedBox(height: 16),
-              const Text(
-                'Aucune vidéo trouvée',
-                style: TextStyle(color: AppColors.textSecondary, fontSize: 16),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                explorer.currentPath.value,
-                style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
-              ),
-            ],
-          ),
-        );
-      }
-
-      return ListView.builder(
-        physics: const BouncingScrollPhysics(),
-        itemCount: folders.length + videos.length,
-        itemBuilder: (context, index) {
-          if (index < folders.length) {
-            return _buildFolderTile(folders[index], explorer);
-          }
-          return _buildVideoTile(videos[index - folders.length], explorer, context);
-        },
+    if (!explorer.hasPermission.value) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.folder_off, size: 64, color: AppColors.textSecondary),
+            const SizedBox(height: 16),
+            const Text(
+              'Permission requise',
+              style: TextStyle(color: AppColors.textPrimary, fontSize: 16),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Autorisez l\'accès aux fichiers pour naviguer',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: explorer.retryPermission,
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+              child: const Text('Autoriser', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
       );
-    });
+    }
+
+    if (explorer.isLoading.value) {
+      return const Center(
+        child: CircularProgressIndicator(color: AppColors.primary),
+      );
+    }
+
+    final allItems = explorer.items;
+    final visibleItems = allItems.where((e) {
+      if (e is Directory) return true;
+      return explorer.isVideo(e);
+    }).toList();
+
+    if (visibleItems.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.folder_open, size: 64,
+                color: AppColors.textSecondary.withValues(alpha: 0.4)),
+            const SizedBox(height: 16),
+            const Text(
+              'Dossier vide',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 16),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      physics: const BouncingScrollPhysics(),
+      itemCount: visibleItems.length,
+      itemBuilder: (context, index) {
+        final entity = visibleItems[index];
+        if (entity is Directory) {
+          return _buildFolderTile(entity, explorer);
+        }
+        return _buildVideoTile(entity as File, explorer, context);
+      },
+    );
   }
 
-  Widget _buildFolderTile(dynamic folder, ExplorerController explorer) {
+  Widget _buildFolderTile(Directory folder, ExplorerController explorer) {
+    final name = folder.path.split('/').last;
     return InkWell(
       onTap: () => explorer.openFolder(folder.path),
       child: Container(
@@ -192,7 +215,7 @@ class ExplorerScreen extends StatelessWidget {
             const SizedBox(width: 14),
             Expanded(
               child: Text(
-                folder.name,
+                name,
                 style: const TextStyle(
                   color: AppColors.textPrimary,
                   fontSize: 15,
@@ -202,19 +225,6 @@ class ExplorerScreen extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            if (folder.videoCount > 0)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: AppColors.accent.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  '${folder.videoCount}',
-                  style: const TextStyle(color: AppColors.accent, fontSize: 12, fontWeight: FontWeight.w600),
-                ),
-              ),
-            const SizedBox(width: 8),
             const Icon(Icons.chevron_right, color: AppColors.textSecondary, size: 20),
           ],
         ),
@@ -222,9 +232,15 @@ class ExplorerScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildVideoTile(dynamic video, ExplorerController explorer, BuildContext context) {
+  Widget _buildVideoTile(File file, ExplorerController explorer, BuildContext context) {
+    final name = file.path.split('/').last;
+    FileStat? stat;
+    try {
+      stat = file.statSync();
+    } catch (_) {}
+
     return InkWell(
-      onTap: () => _onVideoTap(video, explorer, context),
+      onTap: () => _onVideoTap(file, explorer, context),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: const BoxDecoration(
@@ -247,7 +263,7 @@ class ExplorerScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    video.name,
+                    name,
                     style: const TextStyle(
                       color: AppColors.textPrimary,
                       fontSize: 14,
@@ -256,20 +272,13 @@ class ExplorerScreen extends StatelessWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Text(
-                        _formatFileSize(video.size),
-                        style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
-                      ),
-                      const SizedBox(width: 12),
-                      Text(
-                        _formatDate(video.lastModified),
-                        style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
-                      ),
-                    ],
-                  ),
+                  if (stat != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      _formatFileSize(stat.size),
+                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -280,8 +289,11 @@ class ExplorerScreen extends StatelessWidget {
     );
   }
 
-  void _onVideoTap(dynamic video, ExplorerController explorer, BuildContext context) {
-    final subtitles = explorer.findSubtitlesForVideo(video.path);
+  void _onVideoTap(File file, ExplorerController explorer, BuildContext context) {
+    final matchedSubs = explorer.findSubtitlesForVideo(file.path);
+    final allSubs = explorer.allSubtitlesInFolder();
+    final otherSubs = allSubs.where((s) => !matchedSubs.contains(s)).toList();
+    final name = file.path.split('/').last;
 
     showModalBottomSheet(
       context: context,
@@ -289,92 +301,117 @@ class ExplorerScreen extends StatelessWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (ctx) => _buildSubtitlePicker(ctx, video, subtitles),
+      builder: (ctx) => _buildSubtitlePicker(ctx, file.path, name, matchedSubs, otherSubs),
     );
   }
 
-  Widget _buildSubtitlePicker(BuildContext context, dynamic video, List<String> subtitles) {
+  Widget _buildSubtitlePicker(
+    BuildContext context,
+    String videoPath,
+    String videoName,
+    List<String> matchedSubs,
+    List<String> otherSubs,
+  ) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: 16),
-              decoration: BoxDecoration(
-                color: AppColors.textSecondary.withValues(alpha: 0.3),
-                borderRadius: BorderRadius.circular(2),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40, height: 4,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: AppColors.textSecondary.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
             ),
-          ),
-          Text(
-            video.name,
-            style: const TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-            ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            'Choisir un fichier de sous-titres',
-            style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
-          ),
-          const SizedBox(height: 16),
-
-          _subtitleOption(
-            icon: Icons.play_arrow,
-            color: AppColors.primary,
-            title: 'Sans sous-titres',
-            onTap: () {
-              Navigator.pop(context);
-              _launchPlayer(video.path, video.name, null);
-            },
-          ),
-
-          if (subtitles.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            const Padding(
-              padding: EdgeInsets.only(left: 4, bottom: 6),
-              child: Text(
-                'Sous-titres trouvés',
-                style: TextStyle(color: AppColors.accent, fontSize: 12, fontWeight: FontWeight.w600),
+            Text(
+              videoName,
+              style: const TextStyle(
+                color: AppColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w600,
               ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
-            ...subtitles.map((path) => _subtitleOption(
-              icon: Icons.subtitles,
-              color: AppColors.accent,
-              title: path.split('/').last,
+            const SizedBox(height: 4),
+            const Text(
+              'Choisir un fichier de sous-titres',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+
+            _subtitleOption(
+              icon: Icons.play_arrow,
+              color: AppColors.primary,
+              title: 'Sans sous-titres',
               onTap: () {
                 Navigator.pop(context);
-                _launchPlayer(video.path, video.name, path);
+                _launchPlayer(videoPath, videoName, null);
               },
-            )),
-          ],
+            ),
 
-          const SizedBox(height: 8),
-          _subtitleOption(
-            icon: Icons.folder_open,
-            color: AppColors.textSecondary,
-            title: 'Parcourir...',
-            onTap: () async {
-              Navigator.pop(context);
-              final result = await FilePicker.platform.pickFiles(
-                type: FileType.custom,
-                allowedExtensions: ['srt', 'vtt'],
-              );
-              if (result != null && result.files.single.path != null) {
-                _launchPlayer(video.path, video.name, result.files.single.path);
-              }
-            },
-          ),
-        ],
+            if (matchedSubs.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              const Padding(
+                padding: EdgeInsets.only(left: 4, bottom: 6),
+                child: Text(
+                  'Correspondants',
+                  style: TextStyle(color: AppColors.accent, fontSize: 12, fontWeight: FontWeight.w600),
+                ),
+              ),
+              ...matchedSubs.map((path) => _subtitleOption(
+                icon: Icons.subtitles,
+                color: AppColors.accent,
+                title: path.split('/').last,
+                onTap: () {
+                  Navigator.pop(context);
+                  _launchPlayer(videoPath, videoName, path);
+                },
+              )),
+            ],
+
+            if (otherSubs.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              const Padding(
+                padding: EdgeInsets.only(left: 4, bottom: 6),
+                child: Text(
+                  'Autres sous-titres du dossier',
+                  style: TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600),
+                ),
+              ),
+              ...otherSubs.map((path) => _subtitleOption(
+                icon: Icons.subtitles_outlined,
+                color: AppColors.textSecondary,
+                title: path.split('/').last,
+                onTap: () {
+                  Navigator.pop(context);
+                  _launchPlayer(videoPath, videoName, path);
+                },
+              )),
+            ],
+
+            const SizedBox(height: 8),
+            _subtitleOption(
+              icon: Icons.folder_open,
+              color: AppColors.textSecondary,
+              title: 'Parcourir...',
+              onTap: () async {
+                Navigator.pop(context);
+                final result = await FilePicker.platform.pickFiles(
+                  type: FileType.custom,
+                  allowedExtensions: ['srt', 'vtt'],
+                );
+                if (result != null && result.files.single.path != null) {
+                  _launchPlayer(videoPath, videoName, result.files.single.path);
+                }
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -432,9 +469,5 @@ class ExplorerScreen extends StatelessWidget {
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(0)} KB';
     if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
     return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
-  }
-
-  String _formatDate(DateTime date) {
-    return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
   }
 }
