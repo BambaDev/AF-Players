@@ -22,6 +22,7 @@ class SyncController extends GetxController {
   final Queue<SubtitleEntry> _queue = Queue();
   bool _loopRunning = false;
   bool _videoPausedForTts = false;
+  bool _draining = false;
   double _baseSpeed = 1.0;
 
   @override
@@ -48,6 +49,7 @@ class SyncController extends GetxController {
 
   void _onPositionChanged(Duration position) {
     if (syncStatus.value == SyncStatus.userPaused) return;
+    if (_draining) return;
     if (!isTtsEnabled.value) return;
 
     _subtitleController.updatePosition(position);
@@ -67,13 +69,13 @@ class SyncController extends GetxController {
   void _onNewEntryQueued() {
     switch (ttsSyncMode.value) {
       case 1:
-        if (_queue.length > 1 && !_videoPausedForTts) {
+        if (_loopRunning && !_videoPausedForTts) {
           _videoPausedForTts = true;
           _playerController.pause();
         }
         break;
       case 2:
-        if (_queue.length > 1) _adjustSpeed();
+        if (_loopRunning) _adjustSpeed();
         break;
     }
   }
@@ -83,7 +85,7 @@ class SyncController extends GetxController {
     _loopRunning = true;
 
     while (_queue.isNotEmpty) {
-      if (syncStatus.value == SyncStatus.userPaused) break;
+      if (syncStatus.value == SyncStatus.userPaused && !_draining) break;
 
       syncStatus.value = SyncStatus.speaking;
       final entry = _queue.removeFirst();
@@ -92,10 +94,16 @@ class SyncController extends GetxController {
         await _ttsController.speak(entry.text);
       } catch (_) {}
 
-      if (syncStatus.value == SyncStatus.userPaused) break;
+      if (syncStatus.value == SyncStatus.userPaused && !_draining) break;
     }
 
     _loopRunning = false;
+
+    if (_draining) {
+      _draining = false;
+      syncStatus.value = SyncStatus.userPaused;
+      return;
+    }
 
     if (syncStatus.value != SyncStatus.userPaused) {
       _onAllDone();
@@ -127,15 +135,22 @@ class SyncController extends GetxController {
   }
 
   void onUserPause() {
-    syncStatus.value = SyncStatus.userPaused;
-    _queue.clear();
     _videoPausedForTts = false;
-    _ttsController.stop();
     _playerController.pause();
+
+    if (ttsSyncMode.value == 1 && _loopRunning) {
+      _draining = true;
+    } else {
+      syncStatus.value = SyncStatus.userPaused;
+      _queue.clear();
+      _ttsController.stop();
+    }
+
     if (ttsSyncMode.value == 2) _restoreBaseSpeed();
   }
 
   void onUserPlay() {
+    _draining = false;
     syncStatus.value = SyncStatus.playing;
     _lastSpokenEntry = null;
     _videoPausedForTts = false;
@@ -143,6 +158,7 @@ class SyncController extends GetxController {
   }
 
   void onUserSeek(Duration position) {
+    _draining = false;
     _ttsController.stop();
     _queue.clear();
     _lastSpokenEntry = null;
@@ -154,6 +170,7 @@ class SyncController extends GetxController {
   void toggleTts() {
     isTtsEnabled.toggle();
     if (!isTtsEnabled.value) {
+      _draining = false;
       _ttsController.stop();
       _queue.clear();
       if (_videoPausedForTts) {
@@ -170,6 +187,7 @@ class SyncController extends GetxController {
   }
 
   void reset() {
+    _draining = false;
     _ttsController.stop();
     _queue.clear();
     _lastSpokenEntry = null;
