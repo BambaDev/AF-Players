@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'data/models/video_item.dart';
+import 'data/models/playlist.dart';
 import 'app.dart';
 
 void main() async {
@@ -10,6 +11,7 @@ void main() async {
   await Hive.initFlutter();
   Hive.registerAdapter(VideoItemAdapter());
   Hive.registerAdapter(VideoSourceTypeAdapter());
+  Hive.registerAdapter(PlaylistAdapter());
 
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,

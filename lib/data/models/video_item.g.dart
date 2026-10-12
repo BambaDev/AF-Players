@@ -23,14 +23,17 @@ class VideoItemAdapter extends TypeAdapter<VideoItem> {
       subtitlePath: fields[3] as String?,
       sourceType: fields[4] as VideoSourceType,
       addedAt: fields[5] as DateTime,
-      lastPositionMs: fields[6] as int,
+      lastPositionMs: fields[6] == null ? 0 : fields[6] as int,
+      isFavorite: fields[7] == null ? false : fields[7] as bool,
+      lastPlayedAt: fields[8] as DateTime?,
+      durationMs: fields[9] == null ? 0 : fields[9] as int,
     );
   }
 
   @override
   void write(BinaryWriter writer, VideoItem obj) {
     writer
-      ..writeByte(7)
+      ..writeByte(10)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -44,7 +47,13 @@ class VideoItemAdapter extends TypeAdapter<VideoItem> {
       ..writeByte(5)
       ..write(obj.addedAt)
       ..writeByte(6)
-      ..write(obj.lastPositionMs);
+      ..write(obj.lastPositionMs)
+      ..writeByte(7)
+      ..write(obj.isFavorite)
+      ..writeByte(8)
+      ..write(obj.lastPlayedAt)
+      ..writeByte(9)
+      ..write(obj.durationMs);
   }
 
   @override

@@ -34,7 +34,36 @@ class VideoStorageService {
     final video = _box.get(id);
     if (video != null) {
       video.lastPositionMs = position.inMilliseconds;
+      video.lastPlayedAt = DateTime.now();
       await video.save();
     }
+  }
+
+  Future<void> toggleFavorite(String id) async {
+    final video = _box.get(id);
+    if (video != null) {
+      video.isFavorite = !video.isFavorite;
+      await video.save();
+    }
+  }
+
+  Future<void> updateDuration(String id, int durationMs) async {
+    final video = _box.get(id);
+    if (video != null && video.durationMs == 0) {
+      video.durationMs = durationMs;
+      await video.save();
+    }
+  }
+
+  List<VideoItem> getRecents() {
+    return _box.values
+        .where((v) => v.lastPlayedAt != null && v.lastPositionMs > 0)
+        .toList()
+      ..sort((a, b) => b.lastPlayedAt!.compareTo(a.lastPlayedAt!));
+  }
+
+  List<VideoItem> getFavorites() {
+    return _box.values.where((v) => v.isFavorite).toList()
+      ..sort((a, b) => b.addedAt.compareTo(a.addedAt));
   }
 }

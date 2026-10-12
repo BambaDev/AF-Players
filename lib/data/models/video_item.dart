@@ -33,6 +33,15 @@ class VideoItem extends HiveObject {
   @HiveField(6)
   int lastPositionMs;
 
+  @HiveField(7)
+  bool isFavorite;
+
+  @HiveField(8)
+  DateTime? lastPlayedAt;
+
+  @HiveField(9)
+  int durationMs;
+
   VideoItem({
     required this.id,
     required this.title,
@@ -41,8 +50,13 @@ class VideoItem extends HiveObject {
     required this.sourceType,
     required this.addedAt,
     this.lastPositionMs = 0,
+    this.isFavorite = false,
+    this.lastPlayedAt,
+    this.durationMs = 0,
   });
 
   Duration get lastPosition => Duration(milliseconds: lastPositionMs);
   set lastPosition(Duration d) => lastPositionMs = d.inMilliseconds;
+
+  double get progress => durationMs > 0 ? lastPositionMs / durationMs : 0.0;
 }

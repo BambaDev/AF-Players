@@ -75,7 +75,7 @@ class _DualVolumeBarState extends State<DualVolumeBar> {
         mainAxisSize: MainAxisSize.min,
         children: [
           _buildRow(
-            label: 'EN',
+            icon: Icons.movie,
             isMuted: _enMuted,
             onToggleMute: _toggleEnMute,
             mutedIcon: Icons.volume_off,
@@ -85,7 +85,7 @@ class _DualVolumeBarState extends State<DualVolumeBar> {
             onChanged: _onEnVolumeChanged,
           ),
           _buildRow(
-            label: 'FR',
+            icon: Icons.record_voice_over,
             isMuted: _frMuted,
             onToggleMute: _toggleFrMute,
             mutedIcon: Icons.voice_over_off,
@@ -100,7 +100,7 @@ class _DualVolumeBarState extends State<DualVolumeBar> {
   }
 
   Widget _buildRow({
-    required String label,
+    required IconData icon,
     required bool isMuted,
     required VoidCallback onToggleMute,
     required IconData mutedIcon,
@@ -113,17 +113,8 @@ class _DualVolumeBarState extends State<DualVolumeBar> {
       height: 32,
       child: Row(
         children: [
-          SizedBox(
-            width: 22,
-            child: Text(
-              label,
-              style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
+          Icon(icon, color: Colors.white54, size: 16),
+          const SizedBox(width: 4),
           GestureDetector(
             onTap: onToggleMute,
             child: Icon(

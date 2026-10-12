@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
@@ -10,6 +11,7 @@ import '../../controllers/native_tts_controller.dart';
 import '../../controllers/audio_mixer_controller.dart';
 import '../../controllers/settings_controller.dart';
 import '../../controllers/library_controller.dart';
+import '../../controllers/explorer_controller.dart';
 import '../../data/models/video_item.dart';
 import 'widgets/subtitle_overlay.dart';
 import 'widgets/player_controls.dart';
@@ -37,6 +39,9 @@ class _PlayerScreenState extends State<PlayerScreen>
   Timer? _hideTimer;
   Timer? _saveTimer;
   late final Worker _playingWorker;
+
+  List<VideoItem> _playlist = [];
+  int _currentIndex = -1;
 
   static const _autoHideDuration = Duration(seconds: 4);
 
@@ -81,6 +86,55 @@ class _PlayerScreenState extends State<PlayerScreen>
         _showControls();
       }
     });
+
+    ever(_playerController.duration, (Duration dur) {
+      if (dur.inMilliseconds > 0) {
+        Get.find<LibraryController>().updateDuration(
+          widget.video.id,
+          dur.inMilliseconds,
+        );
+      }
+    });
+
+    _buildPlaylist();
+  }
+
+  void _buildPlaylist() {
+    try {
+      final explorer = Get.find<ExplorerController>();
+      final videoFiles = explorer.items
+          .whereType<File>()
+          .where((f) => explorer.isVideo(f))
+          .toList();
+
+      _playlist = videoFiles
+          .map((f) => VideoItem(
+                id: '',
+                title: f.path.split('/').last,
+                videoPath: f.path,
+                sourceType: VideoSourceType.local,
+                addedAt: DateTime.now(),
+              ))
+          .toList();
+
+      _currentIndex =
+          _playlist.indexWhere((v) => v.videoPath == widget.video.videoPath);
+    } catch (_) {}
+  }
+
+  void _playNextVideo() {
+    if (_playlist.isEmpty || _currentIndex < 0) return;
+    if (_currentIndex >= _playlist.length - 1) return;
+    _savePosition();
+    final next = _playlist[_currentIndex + 1];
+    Get.off(() => PlayerScreen(video: next));
+  }
+
+  void _playPreviousVideo() {
+    if (_playlist.isEmpty || _currentIndex <= 0) return;
+    _savePosition();
+    final prev = _playlist[_currentIndex - 1];
+    Get.off(() => PlayerScreen(video: prev));
   }
 
   Future<void> _openVideo() async {
@@ -254,6 +308,8 @@ class _PlayerScreenState extends State<PlayerScreen>
       currentVolume: _settings.videoVolume.value,
       isLocked: _isLocked,
       seekSeconds: _settings.seekDuration.value,
+      onSwipeLeft: _playNextVideo,
+      onSwipeRight: _playPreviousVideo,
     ));
   }
 

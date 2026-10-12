@@ -7,6 +7,8 @@ import '../data/services/video_storage_service.dart';
 class LibraryController extends GetxController {
   final VideoStorageService _storageService = VideoStorageService();
   final videos = <VideoItem>[].obs;
+  final recents = <VideoItem>[].obs;
+  final favorites = <VideoItem>[].obs;
   final isLoading = true.obs;
   final lastPlayedId = ''.obs;
 
@@ -26,6 +28,8 @@ class LibraryController extends GetxController {
 
   void _loadVideos() {
     videos.assignAll(_storageService.getAll());
+    recents.assignAll(_storageService.getRecents());
+    favorites.assignAll(_storageService.getFavorites());
   }
 
   Future<void> addVideo({
@@ -66,5 +70,22 @@ class LibraryController extends GetxController {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('last_played_id', id);
     _loadVideos();
+  }
+
+  Future<void> toggleFavorite(String id) async {
+    await _storageService.toggleFavorite(id);
+    _loadVideos();
+  }
+
+  Future<void> updateDuration(String id, int durationMs) async {
+    await _storageService.updateDuration(id, durationMs);
+  }
+
+  VideoItem? findByPath(String videoPath) {
+    try {
+      return videos.firstWhere((v) => v.videoPath == videoPath);
+    } catch (_) {
+      return null;
+    }
   }
 }

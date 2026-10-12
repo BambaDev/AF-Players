@@ -13,10 +13,20 @@ class ExplorerController extends GetxController {
   final items = <FileSystemEntity>[].obs;
   final isLoading = false.obs;
   final hasPermission = false.obs;
+  final searchQuery = ''.obs;
 
   final List<String> _navStack = [];
 
   bool get isAtRoot => currentPath.value == _rootPath;
+
+  List<FileSystemEntity> get filteredItems {
+    if (searchQuery.value.isEmpty) return items;
+    final q = searchQuery.value.toLowerCase();
+    return items.where((e) {
+      final name = e.path.split('/').last.toLowerCase();
+      return name.contains(q);
+    }).toList();
+  }
 
   @override
   void onInit() {

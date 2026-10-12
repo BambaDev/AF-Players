@@ -10,6 +10,8 @@ class GestureOverlay extends StatefulWidget {
   final double currentVolume;
   final bool isLocked;
   final int seekSeconds;
+  final VoidCallback? onSwipeLeft;
+  final VoidCallback? onSwipeRight;
 
   const GestureOverlay({
     super.key,
@@ -21,6 +23,8 @@ class GestureOverlay extends StatefulWidget {
     required this.currentVolume,
     this.isLocked = false,
     this.seekSeconds = 10,
+    this.onSwipeLeft,
+    this.onSwipeRight,
   });
 
   @override
@@ -36,6 +40,9 @@ class _GestureOverlayState extends State<GestureOverlay> {
   bool _isDragRight = false;
   double _dragIndicatorValue = 0.0;
   double _dragStartValue = 0.0;
+  bool _panDirectionDecided = false;
+  bool _isPanVertical = false;
+  double _panStartX = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -50,9 +57,9 @@ class _GestureOverlayState extends State<GestureOverlay> {
             _doubleTapPosition = details.localPosition;
           },
           onDoubleTap: _handleDoubleTap,
-          onVerticalDragStart: _handleDragStart,
-          onVerticalDragUpdate: _handleDragUpdate,
-          onVerticalDragEnd: _handleDragEnd,
+          onPanStart: _handlePanStart,
+          onPanUpdate: _handlePanUpdate,
+          onPanEnd: _handlePanEnd,
           child: const SizedBox.expand(),
         ),
         _buildSeekIndicators(),
@@ -74,29 +81,60 @@ class _GestureOverlayState extends State<GestureOverlay> {
     }
   }
 
-  void _handleDragStart(DragStartDetails details) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    _isDragRight = details.localPosition.dx > screenWidth / 2;
-    _dragStartValue = _isDragRight ? widget.currentVolume : 0.5;
-    _dragIndicatorValue = _dragStartValue;
-    setState(() => _isDragging = true);
+  void _handlePanStart(DragStartDetails details) {
+    _panDirectionDecided = false;
+    _isPanVertical = false;
+    _panStartX = details.localPosition.dx;
   }
 
-  void _handleDragUpdate(DragUpdateDetails details) {
-    final screenHeight = MediaQuery.of(context).size.height;
-    final delta = -details.delta.dy / (screenHeight * 0.7);
-    _dragIndicatorValue = (_dragIndicatorValue + delta).clamp(0.0, 1.0);
-    setState(() {});
+  void _handlePanUpdate(DragUpdateDetails details) {
+    if (!_panDirectionDecided) {
+      final dx = (details.localPosition.dx - _panStartX).abs();
+      final dy = details.delta.dy.abs();
+      if (dx > 20) {
+        _panDirectionDecided = true;
+        _isPanVertical = false;
+        return;
+      }
+      if (dy > 5) {
+        _panDirectionDecided = true;
+        _isPanVertical = true;
+        final screenWidth = MediaQuery.of(context).size.width;
+        _isDragRight = _panStartX > screenWidth / 2;
+        _dragStartValue = _isDragRight ? widget.currentVolume : 0.5;
+        _dragIndicatorValue = _dragStartValue;
+        setState(() => _isDragging = true);
+      }
+      return;
+    }
 
-    if (_isDragRight) {
-      widget.onVolumeChange(_dragIndicatorValue);
-    } else {
-      widget.onBrightnessChange(_dragIndicatorValue);
+    if (_isDragging && _isPanVertical) {
+      final screenHeight = MediaQuery.of(context).size.height;
+      final delta = -details.delta.dy / (screenHeight * 0.7);
+      _dragIndicatorValue = (_dragIndicatorValue + delta).clamp(0.0, 1.0);
+      setState(() {});
+      if (_isDragRight) {
+        widget.onVolumeChange(_dragIndicatorValue);
+      } else {
+        widget.onBrightnessChange(_dragIndicatorValue);
+      }
     }
   }
 
-  void _handleDragEnd(DragEndDetails details) {
-    setState(() => _isDragging = false);
+  void _handlePanEnd(DragEndDetails details) {
+    if (_isDragging) {
+      setState(() => _isDragging = false);
+      _panDirectionDecided = false;
+      return;
+    }
+
+    final velocity = details.velocity.pixelsPerSecond.dx;
+    if (velocity < -300 && widget.onSwipeLeft != null) {
+      widget.onSwipeLeft!();
+    } else if (velocity > 300 && widget.onSwipeRight != null) {
+      widget.onSwipeRight!();
+    }
+    _panDirectionDecided = false;
   }
 
   Widget _buildSeekIndicators() {

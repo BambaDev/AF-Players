@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:uuid/uuid.dart';
@@ -10,65 +9,59 @@ import '../../controllers/thumbnail_controller.dart';
 import '../../core/constants/app_colors.dart';
 import '../../data/models/video_item.dart';
 import '../player/player_screen.dart';
-import '../settings/settings_screen.dart';
 
-class ExplorerScreen extends StatelessWidget {
-  const ExplorerScreen({super.key});
+class ExplorerTab extends StatelessWidget {
+  const ExplorerTab({super.key});
 
   @override
   Widget build(BuildContext context) {
     final explorer = Get.find<ExplorerController>();
 
-    return Obx(() => PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) {
-          if (explorer.isAtRoot) {
-            SystemNavigator.pop();
-          } else {
-            explorer.goBack();
-          }
-        }
-      },
-      child: Scaffold(
-        backgroundColor: AppColors.background,
-        appBar: AppBar(
-          backgroundColor: AppColors.surface,
-          title: const Text(
-            'AF Players',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 20,
-              color: AppColors.textPrimary,
+    return Obx(() => Column(
+      children: [
+        _buildSearchBar(explorer),
+        _buildBreadcrumb(explorer),
+        _buildResumeBanner(context),
+        Expanded(child: _buildContent(explorer, context)),
+      ],
+    ));
+  }
+
+  Widget _buildSearchBar(ExplorerController explorer) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+      color: AppColors.surface,
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              onChanged: (v) => explorer.searchQuery.value = v,
+              style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
+              decoration: InputDecoration(
+                hintText: 'Rechercher...',
+                hintStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
+                prefixIcon: const Icon(Icons.search, color: AppColors.textSecondary, size: 20),
+                filled: true,
+                fillColor: AppColors.surfaceLight,
+                contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide.none,
+                ),
+                isDense: true,
+              ),
             ),
           ),
-          leading: explorer.isAtRoot
-              ? const SizedBox.shrink()
-              : IconButton(
-                  icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
-                  onPressed: explorer.goBack,
-                ),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.refresh, color: AppColors.textSecondary),
-              onPressed: () => explorer.openFolder(explorer.currentPath.value),
-              tooltip: 'Actualiser',
-            ),
-            IconButton(
-              icon: const Icon(Icons.settings, color: AppColors.textSecondary),
-              onPressed: () => Get.to(() => const SettingsScreen()),
-            ),
-          ],
-        ),
-        body: Column(
-          children: [
-            _buildBreadcrumb(explorer),
-            _buildResumeBanner(context),
-            Expanded(child: _buildContent(explorer, context)),
-          ],
-        ),
+          const SizedBox(width: 8),
+          IconButton(
+            icon: const Icon(Icons.refresh, color: AppColors.textSecondary, size: 20),
+            onPressed: () => explorer.openFolder(explorer.currentPath.value),
+            tooltip: 'Actualiser',
+            visualDensity: VisualDensity.compact,
+          ),
+        ],
       ),
-    ));
+    );
   }
 
   Widget _buildResumeBanner(BuildContext context) {
@@ -179,6 +172,14 @@ class ExplorerScreen extends StatelessWidget {
         reverse: true,
         child: Row(
           children: [
+            if (!explorer.isAtRoot)
+              InkWell(
+                onTap: explorer.goBack,
+                child: const Padding(
+                  padding: EdgeInsets.only(right: 8),
+                  child: Icon(Icons.arrow_back, size: 18, color: AppColors.textSecondary),
+                ),
+              ),
             InkWell(
               onTap: () => explorer.openFolder(prefix),
               child: const Row(
@@ -249,7 +250,7 @@ class ExplorerScreen extends StatelessWidget {
       );
     }
 
-    final allItems = explorer.items;
+    final allItems = explorer.filteredItems;
     final visibleItems = allItems.where((e) {
       if (e is Directory) return true;
       return explorer.isVideo(e);
@@ -263,9 +264,9 @@ class ExplorerScreen extends StatelessWidget {
             Icon(Icons.folder_open, size: 64,
                 color: AppColors.textSecondary.withValues(alpha: 0.4)),
             const SizedBox(height: 16),
-            const Text(
-              'Dossier vide',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 16),
+            Text(
+              explorer.searchQuery.value.isNotEmpty ? 'Aucun résultat' : 'Dossier vide',
+              style: const TextStyle(color: AppColors.textSecondary, fontSize: 16),
             ),
           ],
         ),

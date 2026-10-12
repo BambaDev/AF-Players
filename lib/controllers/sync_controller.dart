@@ -204,6 +204,7 @@ class SyncController extends GetxController {
 
   void _duckVideo() {
     if (!_settings.isDuckingEnabled.value || _isDucked) return;
+    if (_settings.videoVolume.value <= _settings.duckingLevel.value) return;
     _isDucked = true;
     _playerController.setVideoVolume(_settings.duckingLevel.value);
   }
