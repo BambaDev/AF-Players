@@ -9,6 +9,8 @@ import '../../core/constants/app_colors.dart';
 import '../../controllers/explorer_controller.dart';
 import '../settings/settings_screen.dart';
 import '../youtube/youtube_screen.dart';
+import '../search/subtitle_search_screen.dart';
+import '../stats/stats_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -54,6 +56,16 @@ class _HomeScreenState extends State<HomeScreen> {
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: AppColors.textPrimary),
           ),
           actions: [
+            IconButton(
+              icon: const Icon(Icons.bar_chart, color: AppColors.accent),
+              tooltip: 'Statistiques',
+              onPressed: () => Get.to(() => const StatsScreen()),
+            ),
+            IconButton(
+              icon: const Icon(Icons.manage_search, color: AppColors.accent),
+              tooltip: 'Recherche sous-titres',
+              onPressed: () => Get.to(() => const SubtitleSearchScreen()),
+            ),
             IconButton(
               icon: const Icon(Icons.smart_display, color: AppColors.primary),
               tooltip: 'YouTube',

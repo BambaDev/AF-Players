@@ -12,6 +12,10 @@ class SettingsController extends GetxController {
   final ttsSyncMode = 0.obs;
   final isDuckingEnabled = true.obs;
   final duckingLevel = 0.1.obs;
+  final playbackSpeed = 1.0.obs;
+  final subtitleColor = 0xFFFFFFFF.obs;
+  final subtitleBgColor = 0xCC000000.obs;
+  final subtitlePosition = 0.obs;
 
   @override
   void onInit() {
@@ -35,6 +39,10 @@ class SettingsController extends GetxController {
     ttsSyncMode.value = prefs.getInt('tts_sync_mode') ?? 0;
     isDuckingEnabled.value = prefs.getBool('is_ducking_enabled') ?? true;
     duckingLevel.value = prefs.getDouble('ducking_level') ?? 0.1;
+    playbackSpeed.value = prefs.getDouble('playback_speed') ?? 1.0;
+    subtitleColor.value = prefs.getInt('subtitle_color') ?? 0xFFFFFFFF;
+    subtitleBgColor.value = prefs.getInt('subtitle_bg_color') ?? 0xCC000000;
+    subtitlePosition.value = prefs.getInt('subtitle_position') ?? 0;
   }
 
   Future<void> updateTtsRate(double rate) async {
@@ -111,5 +119,29 @@ class SettingsController extends GetxController {
     duckingLevel.value = level;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble('ducking_level', level);
+  }
+
+  Future<void> updatePlaybackSpeed(double speed) async {
+    playbackSpeed.value = speed;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('playback_speed', speed);
+  }
+
+  Future<void> updateSubtitleColor(int color) async {
+    subtitleColor.value = color;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('subtitle_color', color);
+  }
+
+  Future<void> updateSubtitleBgColor(int color) async {
+    subtitleBgColor.value = color;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('subtitle_bg_color', color);
+  }
+
+  Future<void> updateSubtitlePosition(int position) async {
+    subtitlePosition.value = position;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('subtitle_position', position);
   }
 }

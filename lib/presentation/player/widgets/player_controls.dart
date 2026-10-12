@@ -3,6 +3,8 @@ import 'package:get/get.dart';
 import '../../../controllers/native_player_controller.dart';
 import '../../../controllers/sync_controller.dart';
 import '../../../controllers/settings_controller.dart';
+import '../../../controllers/subtitle_controller.dart';
+import '../../../controllers/bookmark_controller.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/duration_extensions.dart';
 import '../../../data/models/video_item.dart';
@@ -137,10 +139,45 @@ class _PlayerControlsState extends State<PlayerControls> {
     });
   }
 
+  static const _speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
+
+  void _cyclePlaybackSpeed(SettingsController settings) {
+    final current = settings.playbackSpeed.value;
+    final idx = _speeds.indexOf(current);
+    final next = _speeds[(idx + 1) % _speeds.length];
+    settings.updatePlaybackSpeed(next);
+    _player.setPlaybackSpeed(next);
+  }
+
   Widget _buildTransportRow(SettingsController settings) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
+        Obx(() => InkWell(
+          onTap: () => _cyclePlaybackSpeed(settings),
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              border: Border.all(
+                color: settings.playbackSpeed.value != 1.0
+                    ? AppColors.primary
+                    : Colors.white38,
+              ),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              'x${settings.playbackSpeed.value == settings.playbackSpeed.value.roundToDouble() ? settings.playbackSpeed.value.toStringAsFixed(0) : settings.playbackSpeed.value.toString()}',
+              style: TextStyle(
+                color: settings.playbackSpeed.value != 1.0
+                    ? AppColors.primary
+                    : Colors.white70,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        )),
         const TtsSpeedSelector(),
         IconButton(
           icon: const Icon(Icons.replay_10, color: Colors.white, size: 26),
@@ -195,6 +232,12 @@ class _PlayerControlsState extends State<PlayerControls> {
           );
         }),
         IconButton(
+          icon: const Icon(Icons.bookmark_add, color: Colors.white70, size: 20),
+          onPressed: () => _showAddBookmarkDialog(),
+          visualDensity: VisualDensity.compact,
+          tooltip: 'Ajouter un signet',
+        ),
+        IconButton(
           icon: Icon(
             _volumeExpanded ? Icons.audiotrack : Icons.tune,
             color: _volumeExpanded ? AppColors.accent : Colors.white70,
@@ -204,6 +247,71 @@ class _PlayerControlsState extends State<PlayerControls> {
           visualDensity: VisualDensity.compact,
         ),
       ],
+    );
+  }
+
+  void _showAddBookmarkDialog() {
+    final posMs = _player.position.value.inMilliseconds;
+    final timestamp = _player.position.value.toShortTimestamp();
+
+    String prefill = '';
+    try {
+      final subCtrl = Get.find<SubtitleController>();
+      prefill = subCtrl.currentEntry.value?.text ?? '';
+    } catch (_) {}
+
+    final textCtrl = TextEditingController(text: prefill);
+
+    Get.dialog(
+      AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: Text(
+          'Signet à $timestamp',
+          style: const TextStyle(color: AppColors.textPrimary),
+        ),
+        content: TextField(
+          controller: textCtrl,
+          autofocus: true,
+          maxLines: 3,
+          style: const TextStyle(color: AppColors.textPrimary),
+          decoration: InputDecoration(
+            hintText: 'Note (optionnel)...',
+            hintStyle: const TextStyle(color: AppColors.textSecondary),
+            filled: true,
+            fillColor: AppColors.surfaceLight,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide.none,
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Get.back(),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Get.find<BookmarkController>().addBookmark(
+                widget.video.id,
+                posMs,
+                textCtrl.text.trim(),
+              );
+              Get.back();
+              Get.snackbar(
+                'Signet ajouté',
+                'Position: $timestamp',
+                snackPosition: SnackPosition.TOP,
+                duration: const Duration(seconds: 2),
+                backgroundColor: AppColors.surface,
+                colorText: AppColors.textPrimary,
+              );
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+            child: const Text('Ajouter', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
     );
   }
 }

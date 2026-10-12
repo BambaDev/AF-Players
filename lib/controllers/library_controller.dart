@@ -81,6 +81,11 @@ class LibraryController extends GetxController {
     await _storageService.updateDuration(id, durationMs);
   }
 
+  Future<void> updateSubtitlePath(String videoId, String? subtitlePath) async {
+    await _storageService.updateSubtitlePath(videoId, subtitlePath);
+    _loadVideos();
+  }
+
   VideoItem? findByPath(String videoPath) {
     try {
       return videos.firstWhere((v) => v.videoPath == videoPath);

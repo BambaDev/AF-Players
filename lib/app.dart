@@ -9,6 +9,9 @@ import 'controllers/library_controller.dart';
 import 'controllers/explorer_controller.dart';
 import 'controllers/thumbnail_controller.dart';
 import 'controllers/playlist_controller.dart';
+import 'controllers/bookmark_controller.dart';
+import 'controllers/subtitle_search_controller.dart';
+import 'controllers/stats_controller.dart';
 import 'presentation/home/home_screen.dart';
 
 class AFPlayersApp extends StatelessWidget {
@@ -23,6 +26,9 @@ class AFPlayersApp extends StatelessWidget {
     Get.put(ExplorerController());
     Get.put(ThumbnailController());
     Get.put(PlaylistController());
+    Get.put(BookmarkController());
+    Get.put(SubtitleSearchController());
+    Get.put(StatsController());
 
     return Obx(() => GetMaterialApp(
       title: AppConstants.appName,

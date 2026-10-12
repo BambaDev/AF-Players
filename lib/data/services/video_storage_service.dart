@@ -62,6 +62,14 @@ class VideoStorageService {
       ..sort((a, b) => b.lastPlayedAt!.compareTo(a.lastPlayedAt!));
   }
 
+  Future<void> updateSubtitlePath(String id, String? path) async {
+    final video = _box.get(id);
+    if (video != null) {
+      video.subtitlePath = path;
+      await video.save();
+    }
+  }
+
   List<VideoItem> getFavorites() {
     return _box.values.where((v) => v.isFavorite).toList()
       ..sort((a, b) => b.addedAt.compareTo(a.addedAt));

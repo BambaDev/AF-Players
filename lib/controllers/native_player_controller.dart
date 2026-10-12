@@ -13,6 +13,7 @@ class NativePlayerController extends GetxController {
   final hasError = false.obs;
   final errorMessage = ''.obs;
   final videoVolume = 0.0.obs;
+  final playbackSpeed = 1.0.obs;
 
   int? textureId;
   StreamSubscription? _eventSub;
@@ -105,6 +106,11 @@ class NativePlayerController extends GetxController {
   Future<void> setVideoVolume(double volume) async {
     videoVolume.value = volume;
     await _method.invokeMethod('setVolume', {'volume': volume});
+  }
+
+  Future<void> setPlaybackSpeed(double speed) async {
+    playbackSpeed.value = speed;
+    await _method.invokeMethod('setSpeed', {'speed': speed});
   }
 
   @override

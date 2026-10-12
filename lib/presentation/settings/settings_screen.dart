@@ -136,13 +136,13 @@ class SettingsScreen extends StatelessWidget {
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       decoration: BoxDecoration(
-                        color: AppColors.subtitleBackground,
+                        color: Color(settings.subtitleBgColor.value),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
                         'Apercu du sous-titre',
                         style: TextStyle(
-                          color: Colors.white,
+                          color: Color(settings.subtitleColor.value),
                           fontSize: settings.subtitleFontSize.value,
                         ),
                       ),
@@ -151,6 +151,84 @@ class SettingsScreen extends StatelessWidget {
                 ],
               ),
             ),
+          ),
+
+          const SizedBox(height: 8),
+
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Couleur du texte', style: TextStyle(fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 8),
+                  Obx(() => Row(
+                    children: [
+                      _colorCircle(settings, 0xFFFFFFFF, 'Blanc', isText: true),
+                      const SizedBox(width: 12),
+                      _colorCircle(settings, 0xFFFFFF00, 'Jaune', isText: true),
+                      const SizedBox(width: 12),
+                      _colorCircle(settings, 0xFF00FF00, 'Vert', isText: true),
+                      const SizedBox(width: 12),
+                      _colorCircle(settings, 0xFF00FFFF, 'Cyan', isText: true),
+                    ],
+                  )),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 8),
+
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Fond des sous-titres', style: TextStyle(fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 8),
+                  Obx(() => Row(
+                    children: [
+                      _colorCircle(settings, 0x00000000, 'Transparent', isText: false),
+                      const SizedBox(width: 12),
+                      _colorCircle(settings, 0x80000000, 'Léger', isText: false),
+                      const SizedBox(width: 12),
+                      _colorCircle(settings, 0xCC000000, 'Normal', isText: false),
+                      const SizedBox(width: 12),
+                      _colorCircle(settings, 0xFF000000, 'Opaque', isText: false),
+                    ],
+                  )),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 8),
+
+          Card(
+            child: Obx(() => ListTile(
+              leading: Icon(
+                settings.subtitlePosition.value == 0 ? Icons.vertical_align_bottom : Icons.vertical_align_top,
+                color: AppColors.primary,
+              ),
+              title: const Text('Position des sous-titres'),
+              subtitle: Text(settings.subtitlePosition.value == 0 ? 'En bas' : 'En haut'),
+              trailing: ToggleButtons(
+                isSelected: [
+                  settings.subtitlePosition.value == 0,
+                  settings.subtitlePosition.value == 1,
+                ],
+                onPressed: (index) => settings.updateSubtitlePosition(index),
+                borderRadius: BorderRadius.circular(8),
+                selectedColor: AppColors.primary,
+                children: const [
+                  Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text('Bas')),
+                  Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text('Haut')),
+                ],
+              ),
+            )),
           ),
 
           const SizedBox(height: 24),
@@ -305,6 +383,40 @@ class SettingsScreen extends StatelessWidget {
               const Icon(Icons.check_circle, color: AppColors.accent, size: 22),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _colorCircle(SettingsController settings, int colorValue, String label, {required bool isText}) {
+    final isSelected = isText
+        ? settings.subtitleColor.value == colorValue
+        : settings.subtitleBgColor.value == colorValue;
+    final color = Color(colorValue);
+
+    return GestureDetector(
+      onTap: () => isText
+          ? settings.updateSubtitleColor(colorValue)
+          : settings.updateSubtitleBgColor(colorValue),
+      child: Column(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: isSelected ? AppColors.primary : AppColors.textSecondary.withValues(alpha: 0.3),
+                width: isSelected ? 3 : 1,
+              ),
+            ),
+            child: colorValue == 0x00000000
+                ? Icon(Icons.block, color: AppColors.textSecondary.withValues(alpha: 0.5), size: 18)
+                : null,
+          ),
+          const SizedBox(height: 4),
+          Text(label, style: const TextStyle(fontSize: 10, color: AppColors.textSecondary)),
+        ],
       ),
     );
   }

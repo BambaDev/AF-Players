@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../controllers/native_player_controller.dart';
 import '../../controllers/subtitle_controller.dart';
@@ -17,6 +18,9 @@ import 'widgets/subtitle_overlay.dart';
 import 'widgets/player_controls.dart';
 import 'widgets/gesture_overlay.dart';
 import 'widgets/lock_overlay.dart';
+import 'widgets/chapter_list_sheet.dart';
+import 'widgets/bookmark_list_sheet.dart';
+import '../../data/services/chapter_detector.dart';
 
 class PlayerScreen extends StatefulWidget {
   final VideoItem video;
@@ -42,7 +46,10 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   List<VideoItem> _playlist = [];
   int _currentIndex = -1;
+  bool _isInPip = false;
+  List<Chapter>? _chapters;
 
+  static const _pipChannel = MethodChannel('com.afplayers/pip');
   static const _autoHideDuration = Duration(seconds: 4);
 
   @override
@@ -97,6 +104,35 @@ class _PlayerScreenState extends State<PlayerScreen>
     });
 
     _buildPlaylist();
+
+    _pipChannel.setMethodCallHandler((call) async {
+      if (call.method == 'onPipChanged') {
+        final isInPip = call.arguments['isInPip'] as bool;
+        if (mounted) {
+          setState(() => _isInPip = isInPip);
+        }
+      }
+    });
+    _pipChannel.invokeMethod('setAutoPip', {'enabled': true});
+  }
+
+  void _enterPip() {
+    _pipChannel.invokeMethod('enterPip');
+  }
+
+  void _detectChapters() {
+    final subFile = _subtitleController.subtitleFile.value;
+    if (subFile == null || subFile.isEmpty) return;
+    final dur = _playerController.duration.value;
+    if (dur > Duration.zero) {
+      _chapters = ChapterDetector.detectChapters(subFile.entries, dur);
+    } else {
+      ever(_playerController.duration, (Duration d) {
+        if (d > Duration.zero && _chapters == null) {
+          _chapters = ChapterDetector.detectChapters(subFile.entries, d);
+        }
+      });
+    }
   }
 
   void _buildPlaylist() {
@@ -149,12 +185,15 @@ class _PlayerScreenState extends State<PlayerScreen>
     if (widget.video.subtitlePath != null) {
       try {
         await _subtitleController.loadFromFile(widget.video.subtitlePath!);
+        _detectChapters();
       } catch (_) {}
     }
 
     if (widget.video.lastPositionMs > 0) {
       await _playerController.seek(widget.video.lastPosition);
     }
+
+    await _playerController.setPlaybackSpeed(_settings.playbackSpeed.value);
 
     _startPeriodicSave();
   }
@@ -167,6 +206,8 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   @override
   void dispose() {
+    _pipChannel.invokeMethod('setAutoPip', {'enabled': false});
+    _pipChannel.setMethodCallHandler(null);
     _playingWorker.dispose();
     _cancelHideTimer();
     _saveTimer?.cancel();
@@ -261,13 +302,13 @@ class _PlayerScreenState extends State<PlayerScreen>
         fit: StackFit.expand,
         children: [
           _buildVideoLayer(),
-          _buildSubtitleLayer(),
-          _buildGestureLayer(),
-          _buildTopBar(),
-          _buildBottomControls(),
-          LockOverlay(isLocked: _isLocked, onToggleLock: _toggleLock),
+          if (!_isInPip) _buildSubtitleLayer(),
+          if (!_isInPip) _buildGestureLayer(),
+          if (!_isInPip) _buildTopBar(),
+          if (!_isInPip) _buildBottomControls(),
+          if (!_isInPip) LockOverlay(isLocked: _isLocked, onToggleLock: _toggleLock),
           _buildBufferingIndicator(),
-          _buildErrorOverlay(),
+          if (!_isInPip) _buildErrorOverlay(),
         ],
       ),
     );
@@ -290,12 +331,13 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   Widget _buildSubtitleLayer() {
-    return Positioned(
+    return Obx(() => Positioned(
       left: 16,
       right: 16,
-      bottom: 16,
+      bottom: _settings.subtitlePosition.value == 0 ? 16 : null,
+      top: _settings.subtitlePosition.value == 1 ? 60 : null,
       child: SubtitleOverlay(subtitleController: _subtitleController),
-    );
+    ));
   }
 
   Widget _buildGestureLayer() {
@@ -354,12 +396,145 @@ class _PlayerScreenState extends State<PlayerScreen>
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
+              if (Platform.isAndroid)
+                IconButton(
+                  icon: const Icon(Icons.picture_in_picture_alt, color: Colors.white, size: 22),
+                  onPressed: _enterPip,
+                  tooltip: 'Picture-in-Picture',
+                ),
+              IconButton(
+                icon: Icon(
+                  widget.video.subtitlePath != null
+                      ? Icons.subtitles
+                      : Icons.subtitles_outlined,
+                  color: widget.video.subtitlePath != null
+                      ? Colors.white
+                      : Colors.white54,
+                  size: 22,
+                ),
+                tooltip: 'Sous-titres',
+                onPressed: () => _showSubtitleImportSheet(context),
+              ),
+              Obx(() {
+                if (!_subtitleController.isLoaded.value) {
+                  return const SizedBox.shrink();
+                }
+                return IconButton(
+                  icon: const Icon(Icons.list, color: Colors.white, size: 22),
+                  onPressed: _showChapters,
+                  tooltip: 'Chapitres',
+                );
+              }),
+              IconButton(
+                icon: const Icon(Icons.bookmarks_outlined, color: Colors.white, size: 22),
+                onPressed: _showBookmarks,
+                tooltip: 'Signets',
+              ),
               IconButton(
                 icon: const Icon(Icons.lock_outline, color: Colors.white, size: 22),
                 onPressed: _toggleLock,
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  void _showBookmarks() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => BookmarkListSheet(
+        videoId: widget.video.id,
+        onSeek: (pos) {
+          _syncController.onUserSeek(pos);
+        },
+      ),
+    );
+  }
+
+  void _showChapters() {
+    final subtitleFile = _subtitleController.subtitleFile.value;
+    if (subtitleFile == null) return;
+
+    _chapters ??= ChapterDetector.detectChapters(
+      subtitleFile.entries,
+      _playerController.duration.value,
+    );
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.grey[900],
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => ChapterListSheet(
+        chapters: _chapters!,
+        currentPosition: _playerController.position.value,
+        onSeek: (pos) => _syncController.onUserSeek(pos),
+      ),
+    );
+  }
+
+  void _showSubtitleImportSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.grey[900],
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40, height: 4,
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const Text(
+              'Sous-titres',
+              style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 16),
+            ListTile(
+              leading: const Icon(Icons.folder_open, color: Colors.white70),
+              title: const Text('Parcourir...', style: TextStyle(color: Colors.white)),
+              subtitle: const Text('Sélectionner un fichier SRT ou VTT', style: TextStyle(color: Colors.white54, fontSize: 12)),
+              onTap: () async {
+                Navigator.pop(ctx);
+                final result = await FilePicker.platform.pickFiles(
+                  type: FileType.custom,
+                  allowedExtensions: ['srt', 'vtt'],
+                );
+                if (result != null && result.files.single.path != null) {
+                  final path = result.files.single.path!;
+                  widget.video.subtitlePath = path;
+                  Get.find<LibraryController>().updateSubtitlePath(widget.video.id, path);
+                  _syncController.reset();
+                  await _subtitleController.loadFromFile(path);
+                }
+              },
+            ),
+            if (widget.video.subtitlePath != null)
+              ListTile(
+                leading: const Icon(Icons.close, color: Colors.redAccent),
+                title: const Text('Retirer les sous-titres', style: TextStyle(color: Colors.redAccent)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  widget.video.subtitlePath = null;
+                  Get.find<LibraryController>().updateSubtitlePath(widget.video.id, null);
+                  _syncController.reset();
+                  _subtitleController.clear();
+                },
+              ),
+          ],
         ),
       ),
     );

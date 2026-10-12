@@ -6,8 +6,10 @@ import android.os.Looper
 import android.view.Surface
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.session.MediaSession
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
@@ -21,6 +23,7 @@ class PlayerBridge(
 ) : MethodChannel.MethodCallHandler {
 
     private var player: ExoPlayer? = null
+    private var mediaSession: MediaSession? = null
     private var textureEntry: TextureRegistry.SurfaceTextureEntry? = null
     private var surface: Surface? = null
     private var eventSink: EventChannel.EventSink? = null
@@ -60,6 +63,11 @@ class PlayerBridge(
             "setVolume" -> {
                 val vol = call.argument<Number>("volume")?.toFloat() ?: 1.0f
                 player?.volume = vol
+                result.success(null)
+            }
+            "setSpeed" -> {
+                val speed = call.argument<Number>("speed")?.toFloat() ?: 1.0f
+                player?.playbackParameters = PlaybackParameters(speed)
                 result.success(null)
             }
             "getPosition" -> result.success(player?.currentPosition ?: 0L)
@@ -105,6 +113,8 @@ class PlayerBridge(
                 }
             })
         }
+
+        mediaSession = MediaSession.Builder(context, player!!).build()
     }
 
     private fun open(path: String) {
@@ -142,6 +152,8 @@ class PlayerBridge(
 
     fun dispose() {
         stopPositionUpdates()
+        mediaSession?.release()
+        mediaSession = null
         player?.release()
         player = null
         surface?.release()
