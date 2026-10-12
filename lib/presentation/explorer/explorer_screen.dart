@@ -156,10 +156,26 @@ class ExplorerTab extends StatelessWidget {
   }
 
   Widget _buildBreadcrumb(ExplorerController explorer) {
+    if (explorer.showingVolumes.value) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        color: AppColors.surface.withValues(alpha: 0.5),
+        child: const Row(
+          children: [
+            Icon(Icons.storage, size: 16, color: AppColors.accent),
+            SizedBox(width: 4),
+            Text('Espaces de stockage', style: TextStyle(fontSize: 12, color: AppColors.accent, fontWeight: FontWeight.w600)),
+          ],
+        ),
+      );
+    }
+
     final path = explorer.currentPath.value;
-    const prefix = '/storage/emulated/0';
-    final relative = path.length > prefix.length
-        ? path.substring(prefix.length + 1)
+    final volumeRoot = explorer.currentVolumeRoot ?? path;
+    final volumeName = explorer.currentVolumeName ?? 'Stockage';
+    final relative = path.length > volumeRoot.length
+        ? path.substring(volumeRoot.length + 1)
         : '';
     final segments = relative.split('/').where((s) => s.isNotEmpty).toList();
 
@@ -172,21 +188,38 @@ class ExplorerTab extends StatelessWidget {
         reverse: true,
         child: Row(
           children: [
-            if (!explorer.isAtRoot)
+            InkWell(
+              onTap: explorer.goBack,
+              child: const Padding(
+                padding: EdgeInsets.only(right: 8),
+                child: Icon(Icons.arrow_back, size: 18, color: AppColors.textSecondary),
+              ),
+            ),
+            if (explorer.storageVolumes.length > 1)
               InkWell(
-                onTap: explorer.goBack,
-                child: const Padding(
-                  padding: EdgeInsets.only(right: 8),
-                  child: Icon(Icons.arrow_back, size: 18, color: AppColors.textSecondary),
+                onTap: explorer.showVolumeList,
+                child: const Row(
+                  children: [
+                    Icon(Icons.storage, size: 14, color: AppColors.textSecondary),
+                    SizedBox(width: 2),
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 4),
+                      child: Icon(Icons.chevron_right, size: 14, color: AppColors.textSecondary),
+                    ),
+                  ],
                 ),
               ),
             InkWell(
-              onTap: () => explorer.openFolder(prefix),
-              child: const Row(
+              onTap: () => explorer.openFolder(volumeRoot),
+              child: Row(
                 children: [
-                  Icon(Icons.phone_android, size: 16, color: AppColors.accent),
-                  SizedBox(width: 4),
-                  Text('Stockage', style: TextStyle(fontSize: 12, color: AppColors.accent)),
+                  Icon(
+                    _volumeIcon(explorer),
+                    size: 16,
+                    color: AppColors.accent,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(volumeName, style: const TextStyle(fontSize: 12, color: AppColors.accent)),
                 ],
               ),
             ),
@@ -197,7 +230,7 @@ class ExplorerTab extends StatelessWidget {
               ),
               InkWell(
                 onTap: () {
-                  final target = '$prefix/${segments.sublist(0, i + 1).join('/')}';
+                  final target = '$volumeRoot/${segments.sublist(0, i + 1).join('/')}';
                   explorer.openFolder(target);
                 },
                 child: Text(
@@ -214,6 +247,26 @@ class ExplorerTab extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  IconData _volumeIcon(ExplorerController explorer) {
+    final root = explorer.currentVolumeRoot;
+    if (root == null) return Icons.phone_android;
+    final vol = explorer.storageVolumes.cast<StorageVolume?>().firstWhere(
+      (v) => v!.path == root,
+      orElse: () => null,
+    );
+    if (vol == null) return Icons.folder;
+    switch (vol.type) {
+      case StorageVolumeType.internal:
+        return Icons.phone_android;
+      case StorageVolumeType.sdCard:
+        return Icons.sd_card;
+      case StorageVolumeType.usb:
+        return Icons.usb;
+      case StorageVolumeType.other:
+        return Icons.storage;
+    }
   }
 
   Widget _buildContent(ExplorerController explorer, BuildContext context) {
@@ -242,6 +295,10 @@ class ExplorerTab extends StatelessWidget {
           ],
         ),
       );
+    }
+
+    if (explorer.showingVolumes.value) {
+      return _buildVolumeList(explorer);
     }
 
     if (explorer.isLoading.value) {
@@ -282,6 +339,103 @@ class ExplorerTab extends StatelessWidget {
           return _buildFolderTile(entity, explorer);
         }
         return _buildVideoTile(entity as File, explorer, context);
+      },
+    );
+  }
+
+  Widget _buildVolumeList(ExplorerController explorer) {
+    final volumes = explorer.storageVolumes;
+    if (volumes.isEmpty) {
+      return const Center(
+        child: CircularProgressIndicator(color: AppColors.primary),
+      );
+    }
+
+    return ListView.builder(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      itemCount: volumes.length,
+      itemBuilder: (context, index) {
+        final vol = volumes[index];
+        IconData icon;
+        Color iconColor;
+        switch (vol.type) {
+          case StorageVolumeType.internal:
+            icon = Icons.phone_android;
+            iconColor = AppColors.primary;
+            break;
+          case StorageVolumeType.sdCard:
+            icon = Icons.sd_card;
+            iconColor = AppColors.accent;
+            break;
+          case StorageVolumeType.usb:
+            icon = Icons.usb;
+            iconColor = Colors.orangeAccent;
+            break;
+          case StorageVolumeType.other:
+            icon = Icons.storage;
+            iconColor = AppColors.textSecondary;
+            break;
+        }
+
+        String? sizeInfo;
+        try {
+          final stat = FileStat.statSync(vol.path);
+          if (stat.type != FileSystemEntityType.notFound) {
+            sizeInfo = vol.path;
+          }
+        } catch (_) {
+          sizeInfo = vol.path;
+        }
+
+        return InkWell(
+          onTap: () => explorer.openFolder(vol.path),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: const BoxDecoration(
+              border: Border(bottom: BorderSide(color: AppColors.surfaceLight, width: 0.5)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: iconColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(icon, color: iconColor, size: 28),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        vol.name,
+                        style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      if (sizeInfo != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          sizeInfo,
+                          style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right, color: AppColors.textSecondary, size: 20),
+              ],
+            ),
+          ),
+        );
       },
     );
   }

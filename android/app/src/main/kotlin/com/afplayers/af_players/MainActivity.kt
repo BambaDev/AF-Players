@@ -10,6 +10,7 @@ class MainActivity : FlutterActivity() {
     private var speechBridge: SpeechBridge? = null
     private var audioMixerBridge: AudioMixerBridge? = null
     private var thumbnailBridge: ThumbnailBridge? = null
+    private var storageBridge: StorageBridge? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -37,6 +38,11 @@ class MainActivity : FlutterActivity() {
             cacheDir = cacheDir,
             channel = MethodChannel(messenger, "com.afplayers/thumbnail")
         )
+
+        storageBridge = StorageBridge(
+            context = this,
+            channel = MethodChannel(messenger, "com.afplayers/storage")
+        )
     }
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
@@ -44,6 +50,7 @@ class MainActivity : FlutterActivity() {
         speechBridge?.dispose()
         audioMixerBridge?.dispose()
         thumbnailBridge?.dispose()
+        storageBridge?.dispose()
         super.cleanUpFlutterEngine(flutterEngine)
     }
 }

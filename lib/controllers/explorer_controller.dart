@@ -1,23 +1,37 @@
 import 'dart:io';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:permission_handler/permission_handler.dart';
+
+class StorageVolume {
+  final String name;
+  final String path;
+  final StorageVolumeType type;
+  StorageVolume({required this.name, required this.path, required this.type});
+}
+
+enum StorageVolumeType { internal, sdCard, usb, other }
 
 class ExplorerController extends GetxController {
   static const _videoExtensions = {
     '.mp4', '.mkv', '.avi', '.webm', '.mov', '.flv', '.3gp', '.ts', '.m4v',
   };
   static const _subtitleExtensions = {'.srt', '.vtt'};
-  static const _rootPath = '/storage/emulated/0';
+  static const _internalPath = '/storage/emulated/0';
+  static const _storageChannel = MethodChannel('com.afplayers/storage');
 
-  final currentPath = _rootPath.obs;
+  final currentPath = _internalPath.obs;
   final items = <FileSystemEntity>[].obs;
   final isLoading = false.obs;
   final hasPermission = false.obs;
   final searchQuery = ''.obs;
+  final storageVolumes = <StorageVolume>[].obs;
+  final showingVolumes = true.obs;
 
   final List<String> _navStack = [];
+  String? _currentVolumeRoot;
 
-  bool get isAtRoot => currentPath.value == _rootPath;
+  bool get isAtRoot => showingVolumes.value;
 
   List<FileSystemEntity> get filteredItems {
     if (searchQuery.value.isEmpty) return items;
@@ -37,8 +51,55 @@ class ExplorerController extends GetxController {
   Future<void> _requestPermissionAndLoad() async {
     hasPermission.value = await _checkAndRequestPermission();
     if (hasPermission.value) {
-      openFolder(_rootPath);
+      await _discoverVolumes();
     }
+  }
+
+  Future<void> _discoverVolumes() async {
+    final volumes = <StorageVolume>[];
+
+    try {
+      final result = await _storageChannel.invokeMethod('getVolumes');
+      final list = (result as List).cast<Map>();
+      for (final vol in list) {
+        final path = vol['path'] as String?;
+        if (path == null) continue;
+        final typeStr = vol['type'] as String? ?? 'other';
+        final type = switch (typeStr) {
+          'internal' => StorageVolumeType.internal,
+          'sdCard' => StorageVolumeType.sdCard,
+          'usb' => StorageVolumeType.usb,
+          _ => StorageVolumeType.other,
+        };
+        volumes.add(StorageVolume(
+          name: vol['name'] as String? ?? path.split('/').last,
+          path: path,
+          type: type,
+        ));
+      }
+    } catch (_) {}
+
+    if (volumes.isEmpty) {
+      volumes.add(StorageVolume(
+        name: 'Stockage interne',
+        path: _internalPath,
+        type: StorageVolumeType.internal,
+      ));
+    }
+
+    storageVolumes.assignAll(volumes);
+
+    if (volumes.length == 1) {
+      openFolder(volumes.first.path);
+    } else {
+      showingVolumes.value = true;
+    }
+  }
+
+  void showVolumeList() {
+    _navStack.clear();
+    _currentVolumeRoot = null;
+    showingVolumes.value = true;
   }
 
   Future<bool> _checkAndRequestPermission() async {
@@ -64,6 +125,11 @@ class ExplorerController extends GetxController {
 
   Future<void> openFolder(String path) async {
     isLoading.value = true;
+    showingVolumes.value = false;
+
+    if (_currentVolumeRoot == null) {
+      _currentVolumeRoot = path;
+    }
 
     if (currentPath.value != path) {
       _navStack.add(currentPath.value);
@@ -100,10 +166,48 @@ class ExplorerController extends GetxController {
   }
 
   void goBack() {
-    if (_navStack.isEmpty) return;
+    if (_navStack.isEmpty) {
+      if (storageVolumes.length > 1) {
+        showVolumeList();
+      }
+      return;
+    }
     final prev = _navStack.removeLast();
     currentPath.value = prev;
-    openFolder(prev);
+    _openFolderDirect(prev);
+  }
+
+  Future<void> _openFolderDirect(String path) async {
+    isLoading.value = true;
+    currentPath.value = path;
+
+    final dir = Directory(path);
+    final folders = <Directory>[];
+    final files = <File>[];
+
+    try {
+      await for (final entity in dir.list(followLinks: false)) {
+        final name = entity.path.split('/').last;
+        if (name.startsWith('.')) continue;
+
+        if (entity is Directory) {
+          folders.add(entity);
+        } else if (entity is File) {
+          final ext = _extensionOf(entity.path);
+          if (_videoExtensions.contains(ext) || _subtitleExtensions.contains(ext)) {
+            files.add(entity);
+          }
+        }
+      }
+    } catch (_) {}
+
+    folders.sort((a, b) => a.path.split('/').last.toLowerCase()
+        .compareTo(b.path.split('/').last.toLowerCase()));
+    files.sort((a, b) => a.path.split('/').last.toLowerCase()
+        .compareTo(b.path.split('/').last.toLowerCase()));
+
+    items.assignAll([...folders, ...files]);
+    isLoading.value = false;
   }
 
   List<String> findSubtitlesForVideo(String videoPath) {
@@ -147,10 +251,21 @@ class ExplorerController extends GetxController {
     return name.substring(0, lastDot);
   }
 
+  String? get currentVolumeName {
+    if (_currentVolumeRoot == null) return null;
+    final vol = storageVolumes.cast<StorageVolume?>().firstWhere(
+      (v) => v!.path == _currentVolumeRoot,
+      orElse: () => null,
+    );
+    return vol?.name;
+  }
+
+  String? get currentVolumeRoot => _currentVolumeRoot;
+
   Future<void> retryPermission() async {
     hasPermission.value = await _checkAndRequestPermission();
     if (hasPermission.value) {
-      openFolder(_rootPath);
+      await _discoverVolumes();
     }
   }
 }
