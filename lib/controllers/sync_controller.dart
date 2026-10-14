@@ -133,6 +133,7 @@ class SyncController extends GetxController {
     _duckVideo();
 
     while (_queue.isNotEmpty) {
+      if (!isTtsEnabled.value) break;
       if (syncStatus.value == SyncStatus.userPaused && !_draining) break;
 
       syncStatus.value = SyncStatus.speaking;
@@ -151,6 +152,7 @@ class SyncController extends GetxController {
         }
       } catch (_) {}
 
+      if (!isTtsEnabled.value) break;
       if (syncStatus.value == SyncStatus.userPaused && !_draining) break;
 
       if (ttsSyncMode.value == 2) {
@@ -269,6 +271,7 @@ class SyncController extends GetxController {
     _playerController.setPlaybackSpeed(boosted);
 
     while (_queue.isEmpty &&
+        isTtsEnabled.value &&
         syncStatus.value != SyncStatus.userPaused &&
         !_draining) {
       final pos = _playerController.position.value;
@@ -284,6 +287,7 @@ class SyncController extends GetxController {
   Future<void> _speakWithPauses(String text) async {
     final sentences = text.split(_sentenceSplitter);
     for (var i = 0; i < sentences.length; i++) {
+      if (!isTtsEnabled.value) return;
       final sentence = sentences[i].trim();
       if (sentence.isEmpty) continue;
       if (syncStatus.value == SyncStatus.userPaused && !_draining) return;

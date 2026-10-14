@@ -216,6 +216,8 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   @override
   void dispose() {
+    _syncController.isTtsEnabled.value = false;
+    _playerController.pause();
     Get.find<NativeTtsController>().stop();
     _syncController.reset();
     _pipChannel.invokeMethod('setBrightness', {'brightness': -1.0});
