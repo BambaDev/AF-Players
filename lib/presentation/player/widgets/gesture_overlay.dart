@@ -8,6 +8,7 @@ class GestureOverlay extends StatefulWidget {
   final ValueChanged<double> onVolumeChange;
   final ValueChanged<double> onBrightnessChange;
   final double currentVolume;
+  final double currentBrightness;
   final bool isLocked;
   final int seekSeconds;
   final VoidCallback? onSwipeLeft;
@@ -21,6 +22,7 @@ class GestureOverlay extends StatefulWidget {
     required this.onVolumeChange,
     required this.onBrightnessChange,
     required this.currentVolume,
+    this.currentBrightness = 0.5,
     this.isLocked = false,
     this.seekSeconds = 10,
     this.onSwipeLeft,
@@ -101,7 +103,7 @@ class _GestureOverlayState extends State<GestureOverlay> {
         _isPanVertical = true;
         final screenWidth = MediaQuery.of(context).size.width;
         _isDragRight = _panStartX > screenWidth / 2;
-        _dragStartValue = _isDragRight ? widget.currentVolume : 0.5;
+        _dragStartValue = _isDragRight ? widget.currentVolume : widget.currentBrightness;
         _dragIndicatorValue = _dragStartValue;
         setState(() => _isDragging = true);
       }

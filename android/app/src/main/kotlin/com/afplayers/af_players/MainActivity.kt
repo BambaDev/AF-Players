@@ -3,7 +3,9 @@ package com.afplayers.af_players
 import android.app.PictureInPictureParams
 import android.content.res.Configuration
 import android.os.Build
+import android.provider.Settings
 import android.util.Rational
+import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
@@ -59,6 +61,30 @@ class MainActivity : FlutterActivity() {
                     "setAutoPip" -> {
                         autoPipEnabled = call.argument<Boolean>("enabled") ?: false
                         result.success(null)
+                    }
+                    "setBrightness" -> {
+                        val brightness = call.argument<Number>("brightness")?.toFloat() ?: -1f
+                        val lp = window.attributes
+                        lp.screenBrightness = if (brightness < 0) {
+                            WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+                        } else {
+                            brightness.coerceIn(0f, 1f)
+                        }
+                        window.attributes = lp
+                        result.success(null)
+                    }
+                    "getBrightness" -> {
+                        val current = window.attributes.screenBrightness
+                        if (current < 0) {
+                            val sys = Settings.System.getInt(
+                                contentResolver,
+                                Settings.System.SCREEN_BRIGHTNESS,
+                                128
+                            )
+                            result.success(sys / 255.0)
+                        } else {
+                            result.success(current.toDouble())
+                        }
                     }
                     else -> result.notImplemented()
                 }

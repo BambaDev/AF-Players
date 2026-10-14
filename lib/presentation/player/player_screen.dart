@@ -48,6 +48,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   int _currentIndex = -1;
   bool _isInPip = false;
   List<Chapter>? _chapters;
+  double _brightness = 0.5;
 
   static const _pipChannel = MethodChannel('com.afplayers/pip');
   static const _autoHideDuration = Duration(seconds: 4);
@@ -115,6 +116,14 @@ class _PlayerScreenState extends State<PlayerScreen>
       }
     });
     _pipChannel.invokeMethod('setAutoPip', {'enabled': true});
+    _initBrightness();
+  }
+
+  Future<void> _initBrightness() async {
+    try {
+      final b = await _pipChannel.invokeMethod<double>('getBrightness');
+      if (b != null && mounted) setState(() => _brightness = b);
+    } catch (_) {}
   }
 
   void _enterPip() {
@@ -207,6 +216,7 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   @override
   void dispose() {
+    _pipChannel.invokeMethod('setBrightness', {'brightness': -1.0});
     _pipChannel.invokeMethod('setAutoPip', {'enabled': false});
     _pipChannel.setMethodCallHandler(null);
     _playingWorker.dispose();
@@ -287,6 +297,11 @@ class _PlayerScreenState extends State<PlayerScreen>
     _playerController.setVideoVolume(volume);
   }
 
+  void _onBrightnessChange(double brightness) {
+    setState(() => _brightness = brightness);
+    _pipChannel.invokeMethod('setBrightness', {'brightness': brightness});
+  }
+
   void _seekForward() {
     _playerController.seekForward(_settings.seekDuration.value);
   }
@@ -347,8 +362,9 @@ class _PlayerScreenState extends State<PlayerScreen>
       onDoubleTapLeft: _seekBackward,
       onDoubleTapRight: _seekForward,
       onVolumeChange: _onVolumeChange,
-      onBrightnessChange: (_) {},
+      onBrightnessChange: _onBrightnessChange,
       currentVolume: _settings.videoVolume.value,
+      currentBrightness: _brightness,
       isLocked: _isLocked,
       seekSeconds: _settings.seekDuration.value,
       onSwipeLeft: _playNextVideo,
