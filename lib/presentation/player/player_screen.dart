@@ -216,6 +216,8 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   @override
   void dispose() {
+    Get.find<NativeTtsController>().stop();
+    _syncController.reset();
     _pipChannel.invokeMethod('setBrightness', {'brightness': -1.0});
     _pipChannel.invokeMethod('setAutoPip', {'enabled': false});
     _pipChannel.setMethodCallHandler(null);
@@ -225,7 +227,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     _controlsFade.dispose();
     _savePosition();
     WakelockPlus.disable();
-    _syncController.reset();
     Get.find<AudioMixerController>().abandonFocus();
     Get.delete<SyncController>();
     Get.delete<SubtitleController>();
