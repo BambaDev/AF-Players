@@ -2,7 +2,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:uuid/uuid.dart';
 import '../../controllers/explorer_controller.dart';
 import '../../controllers/library_controller.dart';
 import '../../controllers/thumbnail_controller.dart';
@@ -687,21 +686,22 @@ class ExplorerTab extends StatelessWidget {
 
   void _launchPlayer(String videoPath, String videoName, String? subtitlePath) {
     final library = Get.find<LibraryController>();
-    final video = VideoItem(
-      id: const Uuid().v4(),
-      title: videoName,
-      videoPath: videoPath,
-      subtitlePath: subtitlePath,
-      sourceType: VideoSourceType.local,
-      addedAt: DateTime.now(),
-    );
-    library.addVideo(
-      title: video.title,
-      videoPath: video.videoPath,
-      subtitlePath: video.subtitlePath,
-      sourceType: video.sourceType,
-    );
-    Get.to(() => PlayerScreen(video: video));
+    var video = library.findByPath(videoPath);
+    if (video != null) {
+      if (subtitlePath != null && video.subtitlePath != subtitlePath) {
+        library.updateSubtitlePath(video.id, subtitlePath);
+        video = library.findByPath(videoPath)!;
+      }
+    } else {
+      library.addVideo(
+        title: videoName,
+        videoPath: videoPath,
+        subtitlePath: subtitlePath,
+        sourceType: VideoSourceType.local,
+      );
+      video = library.findByPath(videoPath)!;
+    }
+    Get.to(() => PlayerScreen(video: video!));
   }
 
   String _formatFileSize(int bytes) {

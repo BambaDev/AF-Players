@@ -38,6 +38,7 @@ class LibraryController extends GetxController {
     String? subtitlePath,
     required VideoSourceType sourceType,
   }) async {
+    if (findByPath(videoPath) != null) return;
     final video = VideoItem(
       id: const Uuid().v4(),
       title: title,

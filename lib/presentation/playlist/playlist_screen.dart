@@ -166,19 +166,15 @@ class PlaylistScreen extends StatelessWidget {
           if (video != null) {
             Get.to(() => PlayerScreen(video: video));
           } else {
-            final v = VideoItem(
-              id: path.hashCode.toString(),
+            library.addVideo(
               title: name,
               videoPath: path,
               sourceType: VideoSourceType.local,
-              addedAt: DateTime.now(),
             );
-            library.addVideo(
-              title: v.title,
-              videoPath: v.videoPath,
-              sourceType: v.sourceType,
-            );
-            Get.to(() => PlayerScreen(video: v));
+            final created = library.findByPath(path);
+            if (created != null) {
+              Get.to(() => PlayerScreen(video: created));
+            }
           }
         },
         child: Container(

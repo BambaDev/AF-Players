@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:collection';
 import 'package:get/get.dart';
 import 'native_player_controller.dart';
@@ -25,6 +26,9 @@ class SyncController extends GetxController {
   bool _draining = false;
   bool _isDucked = false;
   double _baseSpeed = 1.0;
+  bool _videoSlowedForSync = false;
+  double _savedVideoSpeed = 1.0;
+  Timer? _restoreTimer;
 
   @override
   void onInit() {
@@ -42,7 +46,7 @@ class SyncController extends GetxController {
         _videoPausedForTts = false;
         _playerController.play();
       }
-      if (val != 2) _restoreBaseSpeed();
+      if (val != 2) _cancelSyncSpeed();
     });
 
     ever(_playerController.position, _onPositionChanged);
@@ -97,6 +101,14 @@ class SyncController extends GetxController {
       } catch (_) {}
 
       if (syncStatus.value == SyncStatus.userPaused && !_draining) break;
+
+      if (ttsSyncMode.value == 2) {
+        if (_queue.isNotEmpty) {
+          _adjustSpeed();
+        } else {
+          _restoreBaseSpeed();
+        }
+      }
     }
 
     _loopRunning = false;
@@ -128,14 +140,55 @@ class SyncController extends GetxController {
   }
 
   void _adjustSpeed() {
-    final boost = 0.15 * _queue.length;
-    final newSpeed = (_baseSpeed + boost).clamp(0.5, 3.0);
-    _ttsController.setSpeed(newSpeed);
+    _restoreTimer?.cancel();
+    _restoreTimer = null;
+
+    final queueLen = _queue.length;
+    if (queueLen == 0) return;
+
+    final ttsBoost = 0.1 * queueLen;
+    final newTtsSpeed = (_baseSpeed + ttsBoost).clamp(0.5, 1.5);
+    _ttsController.setSpeed(newTtsSpeed);
+
+    if (!_videoSlowedForSync) {
+      _savedVideoSpeed = _settings.playbackSpeed.value;
+      if (_savedVideoSpeed < 0.7) _savedVideoSpeed = 1.0;
+      _videoSlowedForSync = true;
+    }
+    final videoSlow = 0.1 * queueLen;
+    final newVideoSpeed = (_savedVideoSpeed - videoSlow).clamp(0.7, _savedVideoSpeed);
+    _playerController.setPlaybackSpeed(newVideoSpeed);
   }
 
   void _restoreBaseSpeed() {
     _baseSpeed = _settings.ttsSettings.value.speechRate;
     _ttsController.setSpeed(_baseSpeed);
+    if (_videoSlowedForSync) {
+      _progressiveRestore();
+    }
+  }
+
+  void _progressiveRestore() {
+    _restoreTimer?.cancel();
+    const steps = 6;
+    const intervalMs = 500;
+    final target = _savedVideoSpeed;
+    final current = _playerController.playbackSpeed.value;
+    final stepSize = (target - current) / steps;
+    var remaining = steps;
+
+    _restoreTimer = Timer.periodic(const Duration(milliseconds: intervalMs), (timer) {
+      remaining--;
+      if (remaining <= 0) {
+        _playerController.setPlaybackSpeed(target);
+        _videoSlowedForSync = false;
+        timer.cancel();
+        _restoreTimer = null;
+        return;
+      }
+      final next = (_playerController.playbackSpeed.value + stepSize).clamp(0.7, target);
+      _playerController.setPlaybackSpeed(next);
+    });
   }
 
   void onUserPause() {
@@ -151,7 +204,7 @@ class SyncController extends GetxController {
       _ttsController.stop();
     }
 
-    if (ttsSyncMode.value == 2) _restoreBaseSpeed();
+    if (ttsSyncMode.value == 2) _cancelSyncSpeed();
   }
 
   void onUserPlay() {
@@ -168,7 +221,7 @@ class SyncController extends GetxController {
     _queue.clear();
     _lastSpokenEntry = null;
     _videoPausedForTts = false;
-    if (ttsSyncMode.value == 2) _restoreBaseSpeed();
+    if (ttsSyncMode.value == 2) _cancelSyncSpeed();
     _playerController.seek(position);
   }
 
@@ -182,7 +235,7 @@ class SyncController extends GetxController {
         _videoPausedForTts = false;
         _playerController.play();
       }
-      if (ttsSyncMode.value == 2) _restoreBaseSpeed();
+      if (ttsSyncMode.value == 2) _cancelSyncSpeed();
     }
   }
 
@@ -198,7 +251,7 @@ class SyncController extends GetxController {
     _queue.clear();
     _lastSpokenEntry = null;
     _videoPausedForTts = false;
-    if (ttsSyncMode.value == 2) _restoreBaseSpeed();
+    _cancelSyncSpeed();
     syncStatus.value = SyncStatus.idle;
   }
 
@@ -215,8 +268,20 @@ class SyncController extends GetxController {
     _playerController.setVideoVolume(_settings.videoVolume.value);
   }
 
+  void _cancelSyncSpeed() {
+    _restoreTimer?.cancel();
+    _restoreTimer = null;
+    _baseSpeed = _settings.ttsSettings.value.speechRate;
+    _ttsController.setSpeed(_baseSpeed);
+    if (_videoSlowedForSync) {
+      _playerController.setPlaybackSpeed(_savedVideoSpeed);
+      _videoSlowedForSync = false;
+    }
+  }
+
   @override
   void onClose() {
+    _restoreTimer?.cancel();
     _ttsController.stop();
     _queue.clear();
     super.onClose();

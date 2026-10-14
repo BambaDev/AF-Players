@@ -219,7 +219,7 @@ class _PlayerControlsState extends State<PlayerControls> {
         Obx(() {
           final mode = _sync.ttsSyncMode.value;
           final icons = [Icons.queue_music, Icons.pause_circle_outline, Icons.speed];
-          final labels = ['File', 'Pause', 'Vitesse'];
+          final labels = ['File', 'Pause', 'Sync auto'];
           return IconButton(
             icon: Icon(
               icons[mode],
