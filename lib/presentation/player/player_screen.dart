@@ -73,6 +73,7 @@ class _PlayerScreenState extends State<PlayerScreen>
 
     final ttsController = Get.find<NativeTtsController>();
     ttsController.applySettings(_settings.ttsSettings.value);
+    ttsController.setVolume(_settings.frenchVolume.value);
 
     Get.find<AudioMixerController>().requestFocus();
 

@@ -73,6 +73,10 @@ class NativeTtsController extends GetxController {
     _speakCompleter = null;
   }
 
+  Future<void> setVolume(double volume) async {
+    await _channel.invokeMethod('setVolume', {'volume': volume});
+  }
+
   Future<void> setSpeed(double speed) async {
     currentSpeed.value = speed;
     await _channel.invokeMethod('setSpeechRate', {'rate': speed});

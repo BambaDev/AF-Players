@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../../controllers/native_player_controller.dart';
+import '../../../controllers/native_tts_controller.dart';
 import '../../../controllers/settings_controller.dart';
 import '../../../core/constants/app_colors.dart';
 
@@ -40,14 +41,17 @@ class _DualVolumeBarState extends State<DualVolumeBar> {
   }
 
   void _toggleFrMute() {
+    final tts = Get.find<NativeTtsController>();
     setState(() {
       if (_frMuted) {
         _frMuted = false;
         widget.settings.updateFrenchVolume(_previousFrVolume);
+        tts.setVolume(_previousFrVolume);
       } else {
         _previousFrVolume = widget.settings.frenchVolume.value;
         _frMuted = true;
         widget.settings.updateFrenchVolume(0.0);
+        tts.setVolume(0.0);
       }
     });
   }
@@ -65,6 +69,7 @@ class _DualVolumeBarState extends State<DualVolumeBar> {
       setState(() => _frMuted = false);
     }
     widget.settings.updateFrenchVolume(value);
+    Get.find<NativeTtsController>().setVolume(value);
   }
 
   @override

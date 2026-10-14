@@ -20,6 +20,7 @@ class SpeechBridge(
     private var isInitialized = false
     private var pendingResult: MethodChannel.Result? = null
     private val mainHandler = Handler(Looper.getMainLooper())
+    private var volume = 1.0f
 
     init {
         channel.setMethodCallHandler(this)
@@ -70,6 +71,7 @@ class SpeechBridge(
                 val utteranceId = UUID.randomUUID().toString()
                 val params = Bundle().apply {
                     putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, utteranceId)
+                    putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, volume)
                 }
                 val code = tts?.speak(text, TextToSpeech.QUEUE_FLUSH, params, utteranceId)
                 result.success(code == TextToSpeech.SUCCESS)
@@ -86,6 +88,10 @@ class SpeechBridge(
             "setPitch" -> {
                 val pitch = call.argument<Number>("pitch")?.toFloat() ?: 1.0f
                 tts?.setPitch(pitch)
+                result.success(null)
+            }
+            "setVolume" -> {
+                volume = call.argument<Number>("volume")?.toFloat() ?: 1.0f
                 result.success(null)
             }
             "getVoices" -> {
