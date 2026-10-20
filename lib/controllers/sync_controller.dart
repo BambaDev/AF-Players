@@ -7,6 +7,7 @@ import 'native_tts_controller.dart';
 import 'settings_controller.dart';
 import '../data/models/subtitle_entry.dart';
 import '../data/services/subtitle_merger.dart';
+import '../data/services/smart_subtitle_merger.dart';
 
 enum SyncStatus { idle, playing, speaking, paused, userPaused }
 
@@ -35,6 +36,11 @@ class SyncController extends GetxController {
   Map<int, int> _entryToGroupIndex = {};
   int _lastSpokenGroupIndex = -1;
   final Queue<int> _groupIndexQueue = Queue();
+
+  List<SmartMergedGroup> _smartGroups = [];
+  Map<int, int> _smartEntryToGroupIndex = {};
+  int _lastSpokenSmartGroupIndex = -1;
+  final Queue<int> _smartGroupIndexQueue = Queue();
 
   @override
   void onInit() {
@@ -65,6 +71,8 @@ class SyncController extends GetxController {
     if (file == null || file.isEmpty) {
       _mergedGroups = [];
       _entryToGroupIndex = {};
+      _smartGroups = [];
+      _smartEntryToGroupIndex = {};
       return;
     }
     _mergedGroups = SubtitleMerger.merge(file.entries);
@@ -75,6 +83,15 @@ class SyncController extends GetxController {
       }
     }
     _lastSpokenGroupIndex = -1;
+
+    _smartGroups = SmartSubtitleMerger.merge(file.entries);
+    _smartEntryToGroupIndex = {};
+    for (var i = 0; i < _smartGroups.length; i++) {
+      for (final idx in _smartGroups[i].entryIndices) {
+        _smartEntryToGroupIndex[idx] = i;
+      }
+    }
+    _lastSpokenSmartGroupIndex = -1;
   }
 
   void _onPositionChanged(Duration position) {
@@ -95,6 +112,17 @@ class SyncController extends GetxController {
           _lastSpokenGroupIndex = groupIndex;
           _queue.add(_mergedGroups[groupIndex].text);
           _groupIndexQueue.add(groupIndex);
+          _onNewEntryQueued();
+          if (!_loopRunning) {
+            _processLoop();
+          }
+        }
+      } else if (ttsSyncMode.value == 5) {
+        final groupIndex = _smartEntryToGroupIndex[entry.index];
+        if (groupIndex != null && groupIndex != _lastSpokenSmartGroupIndex) {
+          _lastSpokenSmartGroupIndex = groupIndex;
+          _queue.add(_smartGroups[groupIndex].text);
+          _smartGroupIndexQueue.add(groupIndex);
           _onNewEntryQueued();
           if (!_loopRunning) {
             _processLoop();
@@ -144,8 +172,19 @@ class SyncController extends GetxController {
         spokenGroupIdx = _groupIndexQueue.removeFirst();
       }
 
+      int? spokenSmartGroupIdx;
+      if (ttsSyncMode.value == 5 && _smartGroupIndexQueue.isNotEmpty) {
+        spokenSmartGroupIdx = _smartGroupIndexQueue.removeFirst();
+      }
+
       try {
-        if (ttsSyncMode.value == 3 || ttsSyncMode.value == 4) {
+        if (ttsSyncMode.value == 5) {
+          if (spokenSmartGroupIdx != null && spokenSmartGroupIdx < _smartGroups.length) {
+            _ttsController.setSpeed(_smartGroups[spokenSmartGroupIdx].suggestedSpeed);
+          }
+          await _speakWithPauses(text);
+          _ttsController.setSpeed(_baseSpeed);
+        } else if (ttsSyncMode.value == 3 || ttsSyncMode.value == 4) {
           await _speakWithPauses(text);
         } else {
           await _ttsController.speak(text);
@@ -172,6 +211,13 @@ class SyncController extends GetxController {
             await _waitForNextGroup(spokenGroupIdx + 1);
             if (_queue.isNotEmpty) continue;
           }
+        }
+      }
+
+      if (ttsSyncMode.value == 5) {
+        if (_queue.isEmpty && spokenSmartGroupIdx != null) {
+          await _waitForNextSmartGroup(spokenSmartGroupIdx + 1);
+          if (_queue.isNotEmpty) continue;
         }
       }
     }
@@ -282,6 +328,20 @@ class SyncController extends GetxController {
     _playerController.setPlaybackSpeed(baseVideoSpeed);
   }
 
+  Future<void> _waitForNextSmartGroup(int nextIdx) async {
+    if (nextIdx >= _smartGroups.length) return;
+    final nextStart = _smartGroups[nextIdx].start;
+
+    while (_queue.isEmpty &&
+        isTtsEnabled.value &&
+        syncStatus.value != SyncStatus.userPaused &&
+        !_draining) {
+      final pos = _playerController.position.value;
+      if (pos >= nextStart - const Duration(milliseconds: 300)) break;
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
+  }
+
   static final _sentenceSplitter = RegExp(r'(?<=[.!?…])\s+');
 
   Future<void> _speakWithPauses(String text) async {
@@ -309,6 +369,7 @@ class SyncController extends GetxController {
       syncStatus.value = SyncStatus.userPaused;
       _queue.clear();
       _groupIndexQueue.clear();
+      _smartGroupIndexQueue.clear();
       _ttsController.stop();
     }
 
@@ -320,6 +381,7 @@ class SyncController extends GetxController {
     syncStatus.value = SyncStatus.playing;
     _lastSpokenEntry = null;
     _lastSpokenGroupIndex = -1;
+    _lastSpokenSmartGroupIndex = -1;
     _videoPausedForTts = false;
     _playerController.play();
   }
@@ -329,8 +391,10 @@ class SyncController extends GetxController {
     _ttsController.stop();
     _queue.clear();
     _groupIndexQueue.clear();
+    _smartGroupIndexQueue.clear();
     _lastSpokenEntry = null;
     _lastSpokenGroupIndex = -1;
+    _lastSpokenSmartGroupIndex = -1;
     _videoPausedForTts = false;
     if (ttsSyncMode.value == 2 || ttsSyncMode.value == 4) _cancelSyncSpeed();
     _playerController.seek(position);
@@ -343,6 +407,7 @@ class SyncController extends GetxController {
       _ttsController.stop();
       _queue.clear();
       _groupIndexQueue.clear();
+      _smartGroupIndexQueue.clear();
       if (_videoPausedForTts) {
         _videoPausedForTts = false;
         _playerController.play();
@@ -352,7 +417,7 @@ class SyncController extends GetxController {
   }
 
   void cycleSyncMode() {
-    final next = (ttsSyncMode.value + 1) % 5;
+    final next = (ttsSyncMode.value + 1) % 6;
     _settings.updateTtsSyncMode(next);
   }
 
@@ -362,8 +427,10 @@ class SyncController extends GetxController {
     _ttsController.stop();
     _queue.clear();
     _groupIndexQueue.clear();
+    _smartGroupIndexQueue.clear();
     _lastSpokenEntry = null;
     _lastSpokenGroupIndex = -1;
+    _lastSpokenSmartGroupIndex = -1;
     _videoPausedForTts = false;
     _cancelSyncSpeed();
     syncStatus.value = SyncStatus.idle;
@@ -399,6 +466,7 @@ class SyncController extends GetxController {
     _ttsController.stop();
     _queue.clear();
     _groupIndexQueue.clear();
+    _smartGroupIndexQueue.clear();
     super.onClose();
   }
 }
