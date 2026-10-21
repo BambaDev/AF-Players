@@ -1,21 +1,40 @@
 # AF Players
 
-Lecteur video mobile Flutter avec synthese vocale francaise (TTS) a partir des sous-titres. Concu pour les francophones qui apprennent l'anglais via des formations video.
+Lecteur video mobile Flutter avec synthese vocale francaise (TTS) a partir des sous-titres. Concu pour les francophones qui suivent des formations video en langue etrangere.
 
 ## Fonctionnalites
 
-- **Lecteur video natif** — ExoPlayer via MethodChannel, supporte MP4, MKV, AVI, WebM, MOV, FLV, 3GP
-- **Synthese vocale francaise** — lit les sous-titres en francais via Android TextToSpeech
-- **3 modes de synchronisation TTS** :
-  - **File d'attente** — la voix termine chaque phrase, enchaine la suivante, la video continue
-  - **File + pause auto** — pause la video si la voix est en retard, reprend automatiquement
-  - **File + vitesse auto** — accelere la voix si elle est en retard, revient a la normale
+### Lecteur video
+- **Lecteur video natif** — ExoPlayer/Media3 via MethodChannel, supporte MP4, MKV, AVI, WebM, MOV, FLV, 3GP
+- **Gestes style MX Player Pro** — double-tap seek, glisser vertical gauche (luminosite), glisser vertical droite (volume), verrouillage ecran
+- **Picture-in-Picture** — mode PIP automatique quand on quitte l'app
+- **Signets (bookmarks)** — marquer et retrouver des moments dans la video
+- **Detection de chapitres** — decoupe automatique des longues videos
+
+### Synthese vocale francaise
+- **6 modes de synchronisation TTS** :
+  - **0 — File d'attente** — la voix termine chaque phrase, enchaine la suivante, la video continue
+  - **1 — File + pause auto** — pause la video si la voix est en retard, reprend automatiquement
+  - **2 — File + sync auto** — accelere la voix et ralentit la video si retard, retour progressif
+  - **3 — Fusion** — regroupe les fragments de sous-titres en phrases completes avant lecture
+  - **4 — Fusion sync** — fusion + synchronisation bidirectionnelle : TTS et video s'attendent mutuellement
+  - **5 — Smart** — lecture intelligente inspiree VideoTranslatorAI : fusion avancee, vitesse TTS adaptative par segment (1.05x-1.40x), zero retard
+- **Deux volumes independants** — anglais (video) et francais (voix TTS) reglables separement
+- **Audio ducking** — baisse automatique du volume video pendant la lecture vocale
+- **Volume TTS independant** — controle fin du volume de la voix francaise
+
+### Navigation et organisation
 - **Explorateur de fichiers** — navigation dossier par dossier, style MX Player Pro
 - **Selection de sous-titres** — detection automatique des .srt/.vtt dans le meme dossier
-- **Deux volumes independants** — anglais (video) et francais (voix) reglables separement
-- **Interface MX Player Pro** — gestes tactiles, mode immersif, verrouillage ecran, auto-hide
-- **Sous-titres SRT/VTT** — parsing avec recherche binaire, affichage synchronise
-- **Parametres complets** — voix, vitesse, tonalite, taille sous-titres, theme sombre/clair
+- **Recherche dans les sous-titres** — trouver un mot dans tous les sous-titres charges
+- **Playlists** — creer et gerer des listes de lecture
+- **Statistiques** — suivi du temps de visionnage et de la progression
+- **Onglet accueil** — recents, favoris, playlists
+
+### Parametres
+- **Voix francaise** — choix parmi les voix installees, vitesse (x0.5-x2.0), tonalite
+- **Sous-titres** — taille, couleur du texte, couleur de fond, position (haut/bas)
+- **Theme** — sombre et clair
 
 ## Architecture
 
@@ -24,6 +43,9 @@ Flutter (Dart)          <-->  MethodChannel  <-->  Kotlin (Android natif)
                                                     |-- PlayerBridge (ExoPlayer/Media3)
                                                     |-- SpeechBridge (Android TTS)
                                                     |-- AudioMixerBridge (AudioFocus)
+                                                    |-- ThumbnailBridge (miniatures video)
+                                                    |-- StorageBridge (acces fichiers)
+                                                    |-- MainActivity (PIP, luminosite)
 ```
 
 ### Structure du projet
@@ -37,11 +59,17 @@ lib/
     explorer_controller.dart             # Navigation fichiers
     native_player_controller.dart        # Wrapper ExoPlayer via MethodChannel
     native_tts_controller.dart           # Wrapper TTS via MethodChannel
-    sync_controller.dart                 # Synchronisation video/TTS (3 modes)
+    sync_controller.dart                 # Synchronisation video/TTS (6 modes)
     subtitle_controller.dart             # Chargement et suivi sous-titres
     settings_controller.dart             # Parametres persistants
     library_controller.dart              # Bibliotheque de videos (Hive)
     audio_mixer_controller.dart          # AudioFocus Android
+    bookmark_controller.dart             # Signets par video (Hive)
+    playlist_controller.dart             # Gestion des playlists (Hive)
+    thumbnail_controller.dart            # Miniatures video
+    stats_controller.dart                # Statistiques de visionnage
+    subtitle_search_controller.dart      # Recherche dans les sous-titres
+    youtube_controller.dart              # Integration YouTube
 
   data/
     models/
@@ -49,29 +77,49 @@ lib/
       subtitle_entry.dart                # Un cue : start, end, text
       subtitle_file.dart                 # Liste triee + recherche binaire
       tts_settings.dart                  # Langue, vitesse, pitch, voix
+      bookmark.dart                      # Signet : position, note (Hive)
+      playlist.dart                      # Playlist : nom, videos (Hive)
     services/
       subtitle_parser.dart               # Parsing SRT + VTT
+      subtitle_merger.dart               # Fusion de phrases (modes 3-4)
+      smart_subtitle_merger.dart         # Fusion intelligente (mode 5 Smart)
       video_storage_service.dart         # CRUD Hive
       file_picker_service.dart           # Abstraction file_picker
+      chapter_detector.dart              # Detection de chapitres
 
   presentation/
+    home/
+      home_screen.dart                   # Ecran d'accueil avec onglets
+      recents_tab.dart                   # Videos recentes
+      favorites_tab.dart                 # Videos favorites
+      playlists_tab.dart                 # Liste des playlists
     explorer/
-      explorer_screen.dart               # Explorateur de fichiers (accueil)
+      explorer_screen.dart               # Explorateur de fichiers
     player/
       player_screen.dart                 # Lecteur video immersif
       widgets/
         player_controls.dart             # Barre de controles
         subtitle_overlay.dart            # Sous-titres sur la video
-        dual_volume_bar.dart             # 2 sliders volume
+        dual_volume_bar.dart             # 2 sliders volume (EN + FR)
         tts_speed_selector.dart          # Selecteur vitesse voix
-        gesture_overlay.dart             # Gestes MX Player Pro
+        gesture_overlay.dart             # Gestes (volume, luminosite)
         lock_overlay.dart                # Verrouillage ecran
         seek_indicator.dart              # Indicateur de seek
         tts_indicator.dart               # Indicateur TTS actif
+        bookmark_list_sheet.dart         # Liste des signets
+        chapter_list_sheet.dart          # Liste des chapitres
     settings/
       settings_screen.dart               # Ecran parametres
+    search/
+      subtitle_search_screen.dart        # Recherche dans sous-titres
+    stats/
+      stats_screen.dart                  # Statistiques de visionnage
+    playlist/
+      playlist_screen.dart               # Contenu d'une playlist
     library/
-      library_screen.dart                # Ancienne bibliotheque
+      library_screen.dart                # Bibliotheque de videos
+    youtube/
+      youtube_screen.dart                # Ecran YouTube
 
   core/
     constants/
@@ -84,10 +132,12 @@ lib/
       string_extensions.dart             # Strip HTML tags
 
 android/app/src/main/kotlin/com/afplayers/af_players/
-  MainActivity.kt                        # Enregistrement des bridges
+  MainActivity.kt                        # Bridges, PIP, luminosite
   PlayerBridge.kt                        # ExoPlayer, Texture, position stream
-  SpeechBridge.kt                        # Android TTS, callbacks main thread
+  SpeechBridge.kt                        # Android TTS, volume, callbacks
   AudioMixerBridge.kt                    # AudioFocus management
+  ThumbnailBridge.kt                     # Extraction miniatures video
+  StorageBridge.kt                       # Acces fichiers Android
 ```
 
 ## Prerequis
@@ -116,16 +166,18 @@ flutter run
 
 ## Utilisation
 
-1. **Demarrage** — l'explorateur de fichiers s'ouvre, naviguez vers vos videos
-2. **Selectionner une video** — tapez sur un fichier video
+1. **Demarrage** — l'ecran d'accueil affiche les videos recentes, favoris et playlists
+2. **Explorateur** — naviguez vers vos videos via l'explorateur de fichiers
 3. **Choisir les sous-titres** — les fichiers .srt/.vtt du meme dossier sont proposes automatiquement
 4. **Lecture** — la video demarre, la voix francaise lit les sous-titres
 5. **Gestes** :
-   - Double-tap gauche/droite : recul/avance 10s
+   - Double-tap gauche/droite : recul/avance
    - Glisser vertical gauche : luminosite
    - Glisser vertical droite : volume
    - Tap simple : afficher/masquer les controles
-6. **Modes TTS** — cyclez entre les 3 modes avec le bouton dans les controles
+6. **Modes TTS** — cyclez entre les 6 modes avec le bouton dans les controles
+7. **Signets** — tapez l'icone signet pour marquer un moment
+8. **Mode Smart** — selectionnez le mode 5 pour une lecture fluide comme VideoTranslatorAI
 
 ## Configuration
 
@@ -139,6 +191,9 @@ flutter run
 - Dans le lecteur, tapez l'icone tune
 - Slider anglais : volume de la video originale
 - Slider francais : volume de la voix TTS
+
+### Mode Smart (mode 5)
+Le mode Smart fusionne intelligemment les sous-titres fragmentes en phrases completes (3-20 secondes) et adapte automatiquement la vitesse TTS par segment (1.05x a 1.40x) pour coller parfaitement au timing video. Inspire des algorithmes de VideoTranslatorAI.
 
 ## Technologies
 
