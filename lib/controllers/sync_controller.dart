@@ -28,15 +28,13 @@ class SyncController extends GetxController {
   bool _draining = false;
   bool _isDucked = false;
   double _baseSpeed = 1.0;
-  bool _videoSlowedForSync = false;
-  double _savedVideoSpeed = 1.0;
-  Timer? _restoreTimer;
 
+  // Modes 0 (Fusion) et 1 (Pause)
   List<MergedSubtitleGroup> _mergedGroups = [];
   Map<int, int> _entryToGroupIndex = {};
   int _lastSpokenGroupIndex = -1;
-  final Queue<int> _groupIndexQueue = Queue();
 
+  // Mode 2 (Smart)
   List<SmartMergedGroup> _smartGroups = [];
   Map<int, int> _smartEntryToGroupIndex = {};
   int _lastSpokenSmartGroupIndex = -1;
@@ -49,16 +47,15 @@ class SyncController extends GetxController {
     _subtitleController = Get.find<SubtitleController>();
     _ttsController = Get.find<NativeTtsController>();
     _settings = Get.find<SettingsController>();
-    ttsSyncMode.value = _settings.ttsSyncMode.value;
+    ttsSyncMode.value = _settings.ttsSyncMode.value.clamp(0, 2);
     _baseSpeed = _settings.ttsSettings.value.speechRate;
 
     ever(_settings.ttsSyncMode, (val) {
-      ttsSyncMode.value = val;
+      ttsSyncMode.value = val.clamp(0, 2);
       if (val != 1 && _videoPausedForTts) {
         _videoPausedForTts = false;
         _playerController.play();
       }
-      if (val != 2 && val != 4) _cancelSyncSpeed();
     });
 
     ever(_subtitleController.subtitleFile, (_) => _buildMergedGroups());
@@ -75,6 +72,7 @@ class SyncController extends GetxController {
       _smartEntryToGroupIndex = {};
       return;
     }
+
     _mergedGroups = SubtitleMerger.merge(file.entries);
     _entryToGroupIndex = {};
     for (var i = 0; i < _mergedGroups.length; i++) {
@@ -106,52 +104,31 @@ class SyncController extends GetxController {
     if (entry != _lastSpokenEntry) {
       _lastSpokenEntry = entry;
 
-      if (ttsSyncMode.value == 3 || ttsSyncMode.value == 4) {
-        final groupIndex = _entryToGroupIndex[entry.index];
-        if (groupIndex != null && groupIndex != _lastSpokenGroupIndex) {
-          _lastSpokenGroupIndex = groupIndex;
-          _queue.add(_mergedGroups[groupIndex].text);
-          _groupIndexQueue.add(groupIndex);
-          _onNewEntryQueued();
-          if (!_loopRunning) {
-            _processLoop();
-          }
-        }
-      } else if (ttsSyncMode.value == 5) {
+      if (ttsSyncMode.value == 2) {
         final groupIndex = _smartEntryToGroupIndex[entry.index];
         if (groupIndex != null && groupIndex != _lastSpokenSmartGroupIndex) {
           _lastSpokenSmartGroupIndex = groupIndex;
           _queue.add(_smartGroups[groupIndex].text);
           _smartGroupIndexQueue.add(groupIndex);
           _onNewEntryQueued();
-          if (!_loopRunning) {
-            _processLoop();
-          }
+          if (!_loopRunning) _processLoop();
         }
       } else {
-        _queue.add(entry.text);
-        _onNewEntryQueued();
-        if (!_loopRunning) {
-          _processLoop();
+        final groupIndex = _entryToGroupIndex[entry.index];
+        if (groupIndex != null && groupIndex != _lastSpokenGroupIndex) {
+          _lastSpokenGroupIndex = groupIndex;
+          _queue.add(_mergedGroups[groupIndex].text);
+          _onNewEntryQueued();
+          if (!_loopRunning) _processLoop();
         }
       }
     }
   }
 
   void _onNewEntryQueued() {
-    switch (ttsSyncMode.value) {
-      case 1:
-        if (_loopRunning && !_videoPausedForTts) {
-          _videoPausedForTts = true;
-          _playerController.pause();
-        }
-        break;
-      case 2:
-        if (_loopRunning) _adjustSpeed();
-        break;
-      case 4:
-        if (_loopRunning) _adjustSpeed();
-        break;
+    if (ttsSyncMode.value == 1 && _loopRunning && !_videoPausedForTts) {
+      _videoPausedForTts = true;
+      _playerController.pause();
     }
   }
 
@@ -167,58 +144,28 @@ class SyncController extends GetxController {
       syncStatus.value = SyncStatus.speaking;
       final text = _queue.removeFirst();
 
-      int? spokenGroupIdx;
-      if ((ttsSyncMode.value == 3 || ttsSyncMode.value == 4) && _groupIndexQueue.isNotEmpty) {
-        spokenGroupIdx = _groupIndexQueue.removeFirst();
-      }
-
       int? spokenSmartGroupIdx;
-      if (ttsSyncMode.value == 5 && _smartGroupIndexQueue.isNotEmpty) {
+      if (ttsSyncMode.value == 2 && _smartGroupIndexQueue.isNotEmpty) {
         spokenSmartGroupIdx = _smartGroupIndexQueue.removeFirst();
       }
 
       try {
-        if (ttsSyncMode.value == 5) {
-          if (spokenSmartGroupIdx != null && spokenSmartGroupIdx < _smartGroups.length) {
-            _ttsController.setSpeed(_smartGroups[spokenSmartGroupIdx].suggestedSpeed);
-          }
-          await _speakWithPauses(text);
+        if (ttsSyncMode.value == 2 && spokenSmartGroupIdx != null &&
+            spokenSmartGroupIdx < _smartGroups.length) {
+          _ttsController.setSpeed(_smartGroups[spokenSmartGroupIdx].suggestedSpeed);
+        }
+        await _speakWithPauses(text);
+        if (ttsSyncMode.value == 2) {
           _ttsController.setSpeed(_baseSpeed);
-        } else if (ttsSyncMode.value == 3 || ttsSyncMode.value == 4) {
-          await _speakWithPauses(text);
-        } else {
-          await _ttsController.speak(text);
         }
       } catch (_) {}
 
       if (!isTtsEnabled.value) break;
       if (syncStatus.value == SyncStatus.userPaused && !_draining) break;
 
-      if (ttsSyncMode.value == 2) {
-        if (_queue.isNotEmpty) {
-          _adjustSpeed();
-        } else {
-          _restoreBaseSpeed();
-        }
-      }
-
-      if (ttsSyncMode.value == 4) {
-        if (_queue.isNotEmpty) {
-          _adjustSpeed();
-        } else {
-          _cancelSyncSpeed();
-          if (spokenGroupIdx != null) {
-            await _waitForNextGroup(spokenGroupIdx + 1);
-            if (_queue.isNotEmpty) continue;
-          }
-        }
-      }
-
-      if (ttsSyncMode.value == 5) {
-        if (_queue.isEmpty && spokenSmartGroupIdx != null) {
-          await _waitForNextSmartGroup(spokenSmartGroupIdx + 1);
-          if (_queue.isNotEmpty) continue;
-        }
+      if (ttsSyncMode.value == 2 && _queue.isEmpty && spokenSmartGroupIdx != null) {
+        await _waitForNextSmartGroup(spokenSmartGroupIdx + 1);
+        if (_queue.isNotEmpty) continue;
       }
     }
 
@@ -242,90 +189,9 @@ class SyncController extends GetxController {
       _videoPausedForTts = false;
       _playerController.play();
     }
-
-    if (ttsSyncMode.value == 2 || ttsSyncMode.value == 4) _restoreBaseSpeed();
-
     if (syncStatus.value == SyncStatus.speaking) {
       syncStatus.value = SyncStatus.playing;
     }
-  }
-
-  void _adjustSpeed() {
-    _restoreTimer?.cancel();
-    _restoreTimer = null;
-
-    final queueLen = _queue.length;
-    if (queueLen == 0) return;
-
-    if (ttsSyncMode.value == 4) {
-      final minTts = 1.4;
-      final ttsBoost = 0.1 * (queueLen - 1);
-      final newTtsSpeed = (minTts + ttsBoost).clamp(1.4, 2.0);
-      _ttsController.setSpeed(newTtsSpeed);
-    } else {
-      final ttsBoost = 0.1 * queueLen;
-      final newTtsSpeed = (_baseSpeed + ttsBoost).clamp(0.5, 1.5);
-      _ttsController.setSpeed(newTtsSpeed);
-    }
-
-    if (!_videoSlowedForSync) {
-      _savedVideoSpeed = _settings.playbackSpeed.value;
-      if (_savedVideoSpeed < 0.7) _savedVideoSpeed = 1.0;
-      _videoSlowedForSync = true;
-    }
-    final videoSlow = 0.1 * queueLen;
-    final newVideoSpeed = (_savedVideoSpeed - videoSlow).clamp(0.7, _savedVideoSpeed);
-    _playerController.setPlaybackSpeed(newVideoSpeed);
-  }
-
-  void _restoreBaseSpeed() {
-    _baseSpeed = _settings.ttsSettings.value.speechRate;
-    _ttsController.setSpeed(_baseSpeed);
-    if (_videoSlowedForSync) {
-      _progressiveRestore();
-    }
-  }
-
-  void _progressiveRestore() {
-    _restoreTimer?.cancel();
-    const steps = 6;
-    const intervalMs = 500;
-    final target = _savedVideoSpeed;
-    final current = _playerController.playbackSpeed.value;
-    final stepSize = (target - current) / steps;
-    var remaining = steps;
-
-    _restoreTimer = Timer.periodic(const Duration(milliseconds: intervalMs), (timer) {
-      remaining--;
-      if (remaining <= 0) {
-        _playerController.setPlaybackSpeed(target);
-        _videoSlowedForSync = false;
-        timer.cancel();
-        _restoreTimer = null;
-        return;
-      }
-      final next = (_playerController.playbackSpeed.value + stepSize).clamp(0.7, target);
-      _playerController.setPlaybackSpeed(next);
-    });
-  }
-
-  Future<void> _waitForNextGroup(int nextIdx) async {
-    if (nextIdx >= _mergedGroups.length) return;
-    final nextStart = _mergedGroups[nextIdx].start;
-    final baseVideoSpeed = _settings.playbackSpeed.value;
-    final boosted = (baseVideoSpeed + 0.1).clamp(1.0, 1.3);
-    _playerController.setPlaybackSpeed(boosted);
-
-    while (_queue.isEmpty &&
-        isTtsEnabled.value &&
-        syncStatus.value != SyncStatus.userPaused &&
-        !_draining) {
-      final pos = _playerController.position.value;
-      if (pos >= nextStart - const Duration(milliseconds: 300)) break;
-      await Future.delayed(const Duration(milliseconds: 100));
-    }
-
-    _playerController.setPlaybackSpeed(baseVideoSpeed);
   }
 
   Future<void> _waitForNextSmartGroup(int nextIdx) async {
@@ -368,12 +234,9 @@ class SyncController extends GetxController {
     } else {
       syncStatus.value = SyncStatus.userPaused;
       _queue.clear();
-      _groupIndexQueue.clear();
       _smartGroupIndexQueue.clear();
       _ttsController.stop();
     }
-
-    if (ttsSyncMode.value == 2 || ttsSyncMode.value == 4) _cancelSyncSpeed();
   }
 
   void onUserPlay() {
@@ -390,13 +253,13 @@ class SyncController extends GetxController {
     _draining = false;
     _ttsController.stop();
     _queue.clear();
-    _groupIndexQueue.clear();
     _smartGroupIndexQueue.clear();
     _lastSpokenEntry = null;
     _lastSpokenGroupIndex = -1;
     _lastSpokenSmartGroupIndex = -1;
     _videoPausedForTts = false;
-    if (ttsSyncMode.value == 2 || ttsSyncMode.value == 4) _cancelSyncSpeed();
+    _baseSpeed = _settings.ttsSettings.value.speechRate;
+    _ttsController.setSpeed(_baseSpeed);
     _playerController.seek(position);
   }
 
@@ -406,18 +269,18 @@ class SyncController extends GetxController {
       _draining = false;
       _ttsController.stop();
       _queue.clear();
-      _groupIndexQueue.clear();
       _smartGroupIndexQueue.clear();
       if (_videoPausedForTts) {
         _videoPausedForTts = false;
         _playerController.play();
       }
-      if (ttsSyncMode.value == 2 || ttsSyncMode.value == 4) _cancelSyncSpeed();
+      _baseSpeed = _settings.ttsSettings.value.speechRate;
+      _ttsController.setSpeed(_baseSpeed);
     }
   }
 
   void cycleSyncMode() {
-    final next = (ttsSyncMode.value + 1) % 6;
+    final next = (ttsSyncMode.value + 1) % 3;
     _settings.updateTtsSyncMode(next);
   }
 
@@ -426,13 +289,13 @@ class SyncController extends GetxController {
     _draining = false;
     _ttsController.stop();
     _queue.clear();
-    _groupIndexQueue.clear();
     _smartGroupIndexQueue.clear();
     _lastSpokenEntry = null;
     _lastSpokenGroupIndex = -1;
     _lastSpokenSmartGroupIndex = -1;
     _videoPausedForTts = false;
-    _cancelSyncSpeed();
+    _baseSpeed = _settings.ttsSettings.value.speechRate;
+    _ttsController.setSpeed(_baseSpeed);
     syncStatus.value = SyncStatus.idle;
   }
 
@@ -449,23 +312,10 @@ class SyncController extends GetxController {
     _playerController.setVideoVolume(_settings.videoVolume.value);
   }
 
-  void _cancelSyncSpeed() {
-    _restoreTimer?.cancel();
-    _restoreTimer = null;
-    _baseSpeed = _settings.ttsSettings.value.speechRate;
-    _ttsController.setSpeed(_baseSpeed);
-    if (_videoSlowedForSync) {
-      _playerController.setPlaybackSpeed(_savedVideoSpeed);
-      _videoSlowedForSync = false;
-    }
-  }
-
   @override
   void onClose() {
-    _restoreTimer?.cancel();
     _ttsController.stop();
     _queue.clear();
-    _groupIndexQueue.clear();
     _smartGroupIndexQueue.clear();
     super.onClose();
   }
